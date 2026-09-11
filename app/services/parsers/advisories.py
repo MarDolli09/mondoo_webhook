@@ -1,0 +1,9 @@
+from app.services.mondoo_client import MondooGraphQLClient
+from app.services.parsers.base import BaseTicketParser
+
+
+class AdvisoriesParser(BaseTicketParser):
+    ticket_type_name = "advisories"
+
+    def __init__(self, mondoo_client: MondooGraphQLClient):
+        super().__init__(mondoo_client=mondoo_client)

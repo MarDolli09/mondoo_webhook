@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+.env
+.vscode/
+.idea/
+*.zip
+dist/
+build/

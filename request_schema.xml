@@ -1,0 +1,96 @@
+<result>
+<parent/>
+<delivery_address>Gerd-Mosca-Str. 1 Waldbrunn, Baden-Wuerttemberg, 69429</delivery_address>
+<made_sla>true</made_sla>
+<watch_list/>
+<upon_reject>cancel</upon_reject>
+<requested_for>
+<link>https://bmsp.service-now.com/api/now/table/sys_user/94547a6cc387b190626cd31f05013165</link>
+<value>94547a6cc387b190626cd31f05013165</value>
+</requested_for>
+<sys_updated_on>2024-10-09 09:05:40</sys_updated_on>
+<task_effective_number>REQ0014086</task_effective_number>
+<approval_history/>
+<x_bagds_bpos_conn_last_comment/>
+<skills/>
+<number>REQ0014086</number>
+<sys_updated_by>system</sys_updated_by>
+<x_tvgh_teamviewer_session_session/>
+<opened_by>
+<link>https://bmsp.service-now.com/api/now/table/sys_user/94547a6cc387b190626cd31f05013165</link>
+<value>94547a6cc387b190626cd31f05013165</value>
+</opened_by>
+<user_input/>
+<price>0</price>
+<sys_created_on>2024-10-09 08:27:12</sys_created_on>
+<sys_domain>
+<link>https://bmsp.service-now.com/api/now/table/domain/a03078721b2675104a3740c69b4bcb21</link>
+<value>a03078721b2675104a3740c69b4bcb21</value>
+</sys_domain>
+<state>3</state>
+<task_for/>
+<route_reason/>
+<sys_created_by>frank.bechtold@mosca.com</sys_created_by>
+<knowledge>false</knowledge>
+<order/>
+<calendar_stc>2308</calendar_stc>
+<special_instructions/>
+<closed_at>2024-10-09 09:05:40</closed_at>
+<cmdb_ci/>
+<delivery_plan/>
+<contract/>
+<impact>3</impact>
+<active>false</active>
+<work_notes_list/>
+<business_service/>
+<priority>4</priority>
+<sys_domain_path>!!!/!!$/!!5/</sys_domain_path>
+<time_worked/>
+<x_bagds_bpos_conn_last_assignment_group/>
+<expected_start/>
+<opened_at>2024-10-09 08:27:12</opened_at>
+<business_duration>1970-01-01 00:38:28</business_duration>
+<group_list/>
+<work_end/>
+<x_bagds_bpos_conn_last_assigned_to/>
+<approval_set>2024-10-09 08:27:12</approval_set>
+<work_notes/>
+<order_guide/>
+<universal_request/>
+<short_description/>
+<correlation_display/>
+<work_start/>
+<assignment_group/>
+<parent_interaction/>
+<additional_assignee_list/>
+<description/>
+<calendar_duration/>
+<close_notes/>
+<service_offering/>
+<sys_class_name>sc_request</sys_class_name>
+<closed_by/>
+<follow_up/>
+<sys_id>00012147eb415a50006bfacfcad0cde9</sys_id>
+<contact_type/>
+<urgency>3</urgency>
+<requested_date/>
+<company/>
+<reassignment_count>0</reassignment_count>
+<activity_due/>
+<assigned_to/>
+<comments/>
+<approval>approved</approval>
+<sla_due/>
+<comments_and_work_notes/>
+<due_date>2024-10-16 08:27:11</due_date>
+<sys_mod_count>1</sys_mod_count>
+<sys_tags/>
+<x_bagds_bpos_conn_last_work_note/>
+<request_state>closed_complete</request_state>
+<agile_story/>
+<stage>closed_complete</stage>
+<escalation>0</escalation>
+<upon_approval>proceed</upon_approval>
+<correlation_id/>
+<location/>
+</result>
