@@ -1,12 +1,12 @@
 import json
 import re
 from typing import Any, Dict, List, Optional
- 
+
 from app.core.config import settings
 from app.core.logging import logger
 from app.models.schemas import MondooEventType, ServiceNowPayload
 from app.utils.text_cleaner import sanitize_url
- 
+
 from .constants import (
     CORRELATION_ID_MAX,
     DESCRIPTION_MAX,
@@ -16,31 +16,31 @@ from .constants import (
     STATE_CLOSED_SKIPPED,
     STATE_OPEN,
 )
- 
+
 SPACE_ID_PATTERN = re.compile(r"/spaces/([^/]+)")
- 
+
 FALLBACK_ASSIGNMENT_GROUP = "Mosca IT - Security"
- 
- 
+
+
 # ---------------------------------------------------------------------- #
 # Helfer
 # ---------------------------------------------------------------------- #
- 
+
 def truncate(value: str, limit: int) -> str:
     if not value:
         return ""
     return value if len(value) <= limit else value[: limit - 1] + "\u2026"
- 
- 
+
+
 def extract_space_id(owner_mrn: str) -> str:
     match = SPACE_ID_PATTERN.search(owner_mrn or "")
     return match.group(1) if match else ""
- 
- 
+
+
 def correlation_id(payload: ServiceNowPayload) -> str:
     return truncate(payload.case.mrn, CORRELATION_ID_MAX)
- 
- 
+
+
 def assignment_group_name(payload: ServiceNowPayload) -> str:
     space_id = extract_space_id(payload.case.ownerMrn)
     group_name = settings.ASSIGNMENTGROUP_MAP.get(space_id)
@@ -51,13 +51,8 @@ def assignment_group_name(payload: ServiceNowPayload) -> str:
         )
         return FALLBACK_ASSIGNMENT_GROUP
     return group_name
- 
- 
-def attachment_file_name(payload: ServiceNowPayload) -> str:
-    cve_part = (payload.case.findingCVE or "").replace("/", "-").strip() or "details"
-    return f"mondoo_finding_{cve_part}.md"
- 
- 
+
+
 def watcher_names(payload: ServiceNowPayload) -> List[str]:
     case = payload.case
     watchers = list(FIXED_WATCHERS)
@@ -70,10 +65,11 @@ def watcher_names(payload: ServiceNowPayload) -> List[str]:
 
     return watchers
 
+
 # ---------------------------------------------------------------------- #
 # Katalogvariablen
 # ---------------------------------------------------------------------- #
- 
+
 def build_variables(payload: ServiceNowPayload) -> Dict[str, str]:
     case = payload.case
 
@@ -102,12 +98,12 @@ def build_variables(payload: ServiceNowPayload) -> Dict[str, str]:
         "mondoo_policies": case.policies or "",
         "mondoo_assets": json.dumps(mrvs_rows, ensure_ascii=False),
     }
- 
- 
+
+
 # ---------------------------------------------------------------------- #
 # Textfelder
 # ---------------------------------------------------------------------- #
- 
+
 def _risk_line(payload: ServiceNowPayload) -> str:
     case = payload.case
     if case.cvssRiskRating or case.cvssScore:
@@ -116,9 +112,9 @@ def _risk_line(payload: ServiceNowPayload) -> str:
         suffix = f" ({case.riskScore}/100)" if case.riskScore else ""
         return f"Mondoo Risk: {case.riskRating}{suffix}"
     return "Risikobewertung: nicht ermittelbar"
- 
- 
-def _description_header(payload: ServiceNowPayload) -> str:
+
+
+def build_description(payload: ServiceNowPayload) -> str:
     case = payload.case
     lines = [
         f"Mondoo Security Finding | {case.mondooSpace} | {case.ticketType}",
@@ -128,30 +124,6 @@ def _description_header(payload: ServiceNowPayload) -> str:
     ]
     if case.policies:
         lines.append(f"Policy: {case.policies}")
- 
-    lines.append("")
- 
-
-    shown = case.remediations.table[: settings.DESCRIPTION_ASSET_PREVIEW]
-    hidden = len(case.remediations.table) - len(shown)
- 
-    lines.append("Betroffene Systeme (Auszug):" if hidden else "Betroffene Systeme:")
-    lines.extend(f"  - {a.asset_name_name} ({a.platform})" for a in shown)
-    if hidden > 0:
-        lines.append(f"  ... und {hidden} weitere (siehe Formularvariablen und Anhang)")
- 
-    lines.extend(["", "-" * 60, ""])
-    return "\n".join(lines)
- 
- 
-def build_description(payload: ServiceNowPayload) -> str:
-    case = payload.case
-    lines = [
-        f"Mondoo Security Finding | {case.mondooSpace} | {case.ticketType}",
-        f"CVE: {case.findingCVE}   {_risk_line(payload)}",
-        f"Betroffene Assets: {case.assetsCount}",
-        f"Mondoo-Ticket: {sanitize_url(case.ticket_url)}",
-    ]
 
     lines.append("")
     shown = case.remediations.table[: settings.DESCRIPTION_ASSET_PREVIEW]
@@ -163,8 +135,8 @@ def build_description(payload: ServiceNowPayload) -> str:
         lines.append(f"  ... und {hidden} weitere (siehe Formularvariablen)")
 
     return "\n".join(lines)[:DESCRIPTION_MAX]
- 
- 
+
+
 def build_work_notes(payload: ServiceNowPayload, *, is_initial: bool) -> str:
     case = payload.case
     if is_initial:
@@ -177,12 +149,12 @@ def build_work_notes(payload: ServiceNowPayload, *, is_initial: bool) -> str:
         f"CVSS: {case.cvssScore or '-'} ({case.cvssRiskRating or '-'}) | "
         f"Betroffene Assets: {case.assetsCount}"
     )
- 
- 
+
+
 # ---------------------------------------------------------------------- #
 # Task-Felder
 # ---------------------------------------------------------------------- #
- 
+
 def _closing_fields(event_type: MondooEventType) -> Dict[str, Any]:
     if event_type is MondooEventType.CLOSED:
         return {
@@ -194,8 +166,6 @@ def _closing_fields(event_type: MondooEventType) -> Dict[str, Any]:
             ),
         }
     if event_type is MondooEventType.DELETED:
-        # Ein Delete in Mondoo bedeutet nicht, dass der Befund behoben wurde.
-        # Deshalb Closed Skipped statt Closed Complete.
         return {
             "state": STATE_CLOSED_SKIPPED,
             "close_notes": (
@@ -205,8 +175,8 @@ def _closing_fields(event_type: MondooEventType) -> Dict[str, Any]:
             ),
         }
     return {}
- 
- 
+
+
 def build_task_fields(
     payload: ServiceNowPayload,
     *,

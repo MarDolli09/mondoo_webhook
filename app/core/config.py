@@ -21,8 +21,6 @@ class Settings(BaseSettings):
     ASSET_NAME_LOOKUP_LIMIT: int = 50
     CVSS_MAX_FINDING_ATTEMPTS: int = 3
     DESCRIPTION_ASSET_PREVIEW: int = 10
-    DEFAULT_WATCHER_SYS_ID: str
-    DEFAULT_WATCHER: str = "Alexander Haller", "Lars Siefert"
     SNOW_USER_LOOKUP_FIELD: str = "name"
 
     CATEGORY_MAP: Dict[str, str] = {
