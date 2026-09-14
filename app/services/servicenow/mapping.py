@@ -65,6 +65,13 @@ def watcher_names(payload: ServiceNowPayload) -> List[str]:
 
     return watchers
 
+def resolve_creator_name(case: ServiceNowCase) -> str:
+    if case.isAutomated or not case.createdBy:
+        return "Mondoo-Drift"
+    
+    mrn = case.createdBy.strip()
+    return settings.USER_MAP.get(mrn, mrn)
+
 
 # ---------------------------------------------------------------------- #
 # Katalogvariablen
@@ -94,7 +101,7 @@ def build_variables(payload: ServiceNowPayload) -> Dict[str, str]:
         "finding_type": case.ticketType or "",
         "ticket_url": sanitize_url(case.ticket_url),
         "assets_count": str(case.assetsCount),
-        "mondoo_created_by": case.createdBy or "",
+        "mondoo_created_by": resolve_creator_name(case),
         "mondoo_policies": case.policies or "",
         "mondoo_assets": json.dumps(mrvs_rows, ensure_ascii=False),
     }
