@@ -1,7 +1,5 @@
 from typing import Any, Dict, List, Optional, Tuple
- 
-import httpx
- 
+import httpx 
 from app.core.exceptions import MondooAPIError, MondooGraphQLError
 from app.core.logging import logger
  

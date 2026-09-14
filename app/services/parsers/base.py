@@ -32,12 +32,7 @@ class BaseTicketParser(ABC):
         cvss_risk_rating: Optional[str] = None,
         mondoo_risk_rating: Optional[str] = None,
     ) -> Tuple[str, str, str]:
-        """
-        Ermittelt Urgency/Impact und die Herkunft der Entscheidung.
-
-        Reihenfolge: CVSS-Rating (Vulnerabilities/Advisories), dann Mondoo Risk
-        Rating (Fehlkonfigurationen), dann Titel-Praefix, dann Default.
-        """
+ 
         effective_rating = cvss_risk_rating or mondoo_risk_rating
 
         if cvss_risk_rating:
@@ -69,12 +64,7 @@ class BaseTicketParser(ABC):
 
     @staticmethod
     def _unique_finding_refs(case_raw: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """
-        Ein Case ist bei Mondoo ein Flotten-Rollup: derselbe Befund auf n Assets.
-        Alle Refs tragen dann dieselbe findingMrn bei unterschiedlicher scopeMrn.
-        Ohne Deduplizierung wuerde bei 97 Assets 97-mal derselbe Befund gesucht,
-        jeweils mit bis zu MONDOO_GRAPHQL_MAX_PAGES Seiten Paginierung.
-        """
+
         all_refs = case_raw.get("vulnerabilityRefs", []) + case_raw.get("queryRefs", [])
         unique: List[Dict[str, Any]] = []
         seen = set()
@@ -150,17 +140,10 @@ class BaseTicketParser(ABC):
     async def _resolve_assets(
         self, case_raw: Dict[str, Any], title: str, description: str
     ) -> List[AssetRemediation]:
-        table_assets = text_cleaner.extract_asset_table_from_markdown(description)
-        if table_assets:
-            return [AssetRemediation(**asset) for asset in table_assets]
+
+        text_index = text_cleaner.build_asset_index(description)
 
         all_refs = case_raw.get("vulnerabilityRefs", []) + case_raw.get("queryRefs", [])
-
-        single_name_from_title = (
-            text_cleaner.extract_single_asset_from_title(title)
-            if len(all_refs) == 1
-            else None
-        )
 
         # Schritt 1: eindeutige Assets aus den Refs sammeln
         targets: List[Tuple[str, str, str]] = []
@@ -176,25 +159,54 @@ class BaseTicketParser(ABC):
             seen.add(asset_id)
             targets.append((space_id, asset_id, scope_mrn))
 
-        # Schritt 2: Namen nebenlaeufig nachladen (entfaellt bei Titel-Treffer)
+        if not targets:
+            # Kein verwertbarer Ref vorhanden: dann ist der Befundtext die
+            # einzige Quelle, auch wenn er ungenau ist.
+            if text_index:
+                logger.warning(
+                    f"Keine auswertbaren Refs im Case. Verwende ersatzweise die "
+                    f"{len(text_index)} Assets aus dem Befundtext."
+                )
+                return [AssetRemediation(**entry) for entry in text_index.values()]
+            return []
+
+        if len(text_index) > len(targets):
+            logger.info(
+                f"Befundtext nennt {len(text_index)} Assets, der Case referenziert "
+                f"{len(targets)}. Massgeblich sind die Refs; die uebrigen Eintraege "
+                f"stammen aus den Remediation-Tabellen und sind nicht betroffen."
+            )
+
+        single_name_from_title = (
+            text_cleaner.extract_single_asset_from_title(title)
+            if len(targets) == 1
+            else None
+        )
+
+        # Schritt 2: Namen nur fuer die Assets nachladen, die der Befundtext
+        # nicht hergibt
         name_map: Dict[str, str] = {}
         if not single_name_from_title:
-            name_map = await self._fetch_asset_names(targets)
+            missing = [t for t in targets if t[1] not in text_index]
+            name_map = await self._fetch_asset_names(missing)
 
         # Schritt 3: Ergebnisliste bauen
         assets: List[AssetRemediation] = []
         for space_id, asset_id, _scope_mrn in targets:
-            asset_url = (
+            entry = text_index.get(asset_id) or {}
+            fallback_url = (
                 f"https://app.mondoo.com/space/inventory/{asset_id}"
                 f"?region=EU&spaceId={space_id}"
             )
             assets.append(
                 AssetRemediation(
                     asset_name_name=single_name_from_title
+                    or entry.get("asset_name_name")
                     or name_map.get(asset_id)
                     or asset_id,
-                    asset_name_url=asset_url,
-                    platform=settings.CATEGORY_MAP.get(space_id, "-- unknown --"),
+                    asset_name_url=entry.get("asset_name_url") or fallback_url,
+                    platform=entry.get("platform")
+                    or settings.CATEGORY_MAP.get(space_id, "-- unknown --"),
                 )
             )
 

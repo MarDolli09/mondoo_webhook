@@ -12,6 +12,7 @@ CVE_PATTERN = re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE)
 SPACE_ID_PATTERN = re.compile(r"/spaces/([^/]+)")
 MD_LINK_PATTERN = re.compile(r"\[([^\]]+)\]\((https?://[^\)]+)\)")
 SCOPE_MRN_PATTERN = re.compile(r"/spaces/([^/]+)/assets/([^/]+)")
+INVENTORY_ASSET_ID_PATTERN = re.compile(r"/space/inventory/([^?/#]+)")
 TITLE_SINGLE_ASSET_PATTERN = re.compile(r"\s+on\s+([a-zA-Z0-9\-_]+)\s*$", re.IGNORECASE)
 
 _RATINGS = r"CRITICAL|HIGH|MEDIUM|LOW|NONE"
@@ -124,3 +125,16 @@ def extract_asset_table_from_markdown(description: str) -> List[Dict[str, str]]:
                 break
 
     return assets
+
+
+def build_asset_index(description: str) -> Dict[str, Dict[str, str]]:
+
+    index: Dict[str, Dict[str, str]] = {}
+    for entry in extract_asset_table_from_markdown(description):
+        match = INVENTORY_ASSET_ID_PATTERN.search(entry["asset_name_url"])
+        if not match:
+            continue
+        # Der erste Treffer gewinnt: die KB-Tabellen stehen vor der
+        # Sammeltabelle "No packages found" und tragen die genauere Plattform.
+        index.setdefault(match.group(1), entry)
+    return index

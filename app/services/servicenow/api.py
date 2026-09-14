@@ -205,32 +205,33 @@ class ServiceNowAPI:
     # ------------------------------------------------------------------ #
  
     async def _resolve_reference(
-        self, table: str, field: str, value: str, *, label: str
+        self, table: str, *, query: str, value: str, label: str
     ) -> Optional[str]:
 
         cls = ServiceNowAPI
-        cache_key = (table, field, value)
+        cache_key = (table, query, value)
         if cache_key in cls._reference_cache:
             return cls._reference_cache[cache_key]
- 
+
         async with cls._reference_lock:
             if cache_key in cls._reference_cache:
                 return cls._reference_cache[cache_key]
- 
+
             try:
                 records = await self._query_table(
-                    table, query=f"{field}={value}", fields="sys_id", limit=2
+                    table, query=query, fields="sys_id", limit=2
                 )
             except ServiceNowAPIError as exc:
                 logger.error(f"Aufloesung {label} '{value}' fehlgeschlagen: {exc.message}")
                 return None
- 
+
             if not records:
                 logger.error(
-                    f"{label} '{value}' existiert nicht in ServiceNow ({table}.{field})."
+                    f"{label} '{value}' existiert nicht in ServiceNow "
+                    f"(Tabelle {table}, Abfrage '{query}')."
                 )
                 return None
- 
+
             if len(records) > 1:
                 # Anzeigenamen sind in sys_user nicht eindeutig. Lieber laut
                 # scheitern als stillschweigend den falschen Benutzer eintragen.
@@ -239,64 +240,27 @@ class ServiceNowAPI:
                     f"Eindeutiges Merkmal verwenden, etwa email oder user_name."
                 )
                 return None
- 
+
             sys_id = records[0]["sys_id"]
             cls._reference_cache[cache_key] = sys_id
             logger.info(f"{label} '{value}' aufgeloest und zwischengespeichert.")
             return sys_id
- 
+
     async def resolve_group_sys_id(self, group_name: str) -> Optional[str]:
         return await self._resolve_reference(
-            TABLE_USER_GROUP, "name", group_name, label="Assignment Group"
+            TABLE_USER_GROUP,
+            query=f"name={group_name}",
+            value=group_name,
+            label="Assignment Group",
         )
- 
-    async def resolve_user_sys_id(self, user_name: str) -> Optional[str]:
 
+    async def resolve_user_sys_id(self, identifier: str) -> Optional[str]:
+
+        fields = settings.SNOW_USER_LOOKUP_FIELDS or ["name"]
+        query = "^OR".join(f"{field}={identifier}" for field in fields)
         return await self._resolve_reference(
             TABLE_USER,
-            settings.SNOW_USER_LOOKUP_FIELD,
-            user_name,
+            query=f"{query}^active=true",
+            value=identifier,
             label="Benutzer",
         )
- 
-    # ------------------------------------------------------------------ #
-    # Anhaenge
-    # ------------------------------------------------------------------ #
- 
-    async def upload_attachment(
-        self,
-        *,
-        table: str,
-        sys_id: str,
-        file_name: str,
-        content: str,
-        content_type: str = "text/markdown",
-    ) -> bool:
-
-        headers = await self.auth.headers(content_type=content_type)
- 
-        try:
-            response = await self.http_client.post(
-                f"{self.base_url}{PATH_ATTACHMENT}",
-                params={
-                    "table_name": table,
-                    "table_sys_id": sys_id,
-                    "file_name": file_name,
-                },
-                content=content.encode("utf-8"),
-                headers=headers,
-                auth=self.auth.basic_auth(),
-            )
-        except httpx.HTTPError as exc:
-            logger.warning(f"Anhang konnte nicht uebertragen werden: {exc}")
-            return False
- 
-        if response.status_code not in (200, 201):
-            logger.warning(
-                f"Anhang abgelehnt (HTTP {response.status_code}). "
-                f"Pruefen, ob der Integrationsbenutzer Anhaenge schreiben darf."
-            )
-            return False
- 
-        logger.info(f"Anhang '{file_name}' abgelegt.")
-        return True

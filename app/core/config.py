@@ -1,4 +1,4 @@
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     ASSET_NAME_LOOKUP_CONCURRENCY: int = 10
     ASSET_NAME_LOOKUP_LIMIT: int = 50
     DESCRIPTION_ASSET_PREVIEW: int = 10
-    SNOW_USER_LOOKUP_FIELD: str = "email"
+    SNOW_USER_LOOKUP_FIELDS: List[str] = ["user_name", "email", "name"]
 
     CATEGORY_MAP: Dict[str, str] = {
         "eu-elastic-hodgkin-413342": "Azure",
