@@ -1,6 +1,6 @@
 import html
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 HTML_EMOJI_PATTERN = re.compile(r"<[^>]+>|[❌✅⚠️🔴🟢]")
 MARKDOWN_FMT_PATTERN = re.compile(r"(\*{1,2}|`)(.*?)\1")
@@ -13,6 +13,21 @@ SPACE_ID_PATTERN = re.compile(r"/spaces/([^/]+)")
 MD_LINK_PATTERN = re.compile(r"\[([^\]]+)\]\((https?://[^\)]+)\)")
 SCOPE_MRN_PATTERN = re.compile(r"/spaces/([^/]+)/assets/([^/]+)")
 TITLE_SINGLE_ASSET_PATTERN = re.compile(r"\s+on\s+([a-zA-Z0-9\-_]+)\s*$", re.IGNORECASE)
+
+_RATINGS = r"CRITICAL|HIGH|MEDIUM|LOW|NONE"
+
+# V2-Format: "The combined risk is **CRITICAL** (99/100)"
+RISK_SENTENCE_PATTERN = re.compile(
+    rf"combined risk is\s*\**\s*({_RATINGS})\s*\**\s*(?:\(\s*(\d{{1,3}})\s*/\s*100\s*\))?",
+    re.IGNORECASE,
+)
+# V1-Format: Scoring-Tabelle mit "|Risk|CRITICAL|" und "|Risk value|99 / 100|"
+RISK_TABLE_PATTERN = re.compile(rf"\|\s*Risk\s*\|\s*\**\s*({_RATINGS})\b", re.IGNORECASE)
+RISK_VALUE_PATTERN = re.compile(r"\|\s*Risk value\s*\|\s*(\d{1,3})\s*/\s*100", re.IGNORECASE)
+# Letzter Ausweg: irgendeine Risikoangabe der Form "**HIGH** (72/100)"
+RISK_LOOSE_PATTERN = re.compile(
+    rf"\*\*({_RATINGS})\*\*\s*\(\s*(\d{{1,3}})\s*/\s*100\s*\)", re.IGNORECASE
+)
 
 
 def clean_markdown(text: str) -> str:
@@ -31,6 +46,7 @@ def extract_cve(title: str, default: str) -> str:
 def extract_ticket_url(description: str) -> str:
     match = TICKET_URL_PATTERN.search(description)
     return sanitize_url(match.group(1)) if match else ""
+
 
 def sanitize_url(raw_url: str) -> str:
     if not raw_url:
@@ -52,6 +68,41 @@ def extract_single_asset_from_title(title: str) -> Optional[str]:
         if candidate.lower() not in ["assets", "multiple"]:
             return candidate
     return None
+
+
+def extract_risk_from_summary(description: str) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Liest Mondoos Risikobewertung aus dem gerenderten Befundtext.
+
+    Rueckgabe: (Rating, Risk-Wert 0-100 als String) - beide optional.
+
+    Hintergrund: Fuer Fehlkonfigurationen existiert kein CVSS-Score, wohl aber
+    ein Mondoo Risk Rating. Es steht im Text ("The combined risk is CRITICAL
+    (99/100)") und ist damit ohne zusaetzlichen API-Aufruf verfuegbar.
+
+    ACHTUNG: Die Extraktion haengt am Ausgabeformat von Mondoo. Genau daran ist
+    Mondoos eigene ServiceNow-App gescheitert, deren Regex noch das V1-Format
+    erwartet. Deshalb sind hier mehrere Formate hinterlegt, und der Aufrufer
+    protokolliert, ob die Extraktion gegriffen hat.
+    """
+    if not description:
+        return None, None
+
+    match = RISK_SENTENCE_PATTERN.search(description)
+    if match:
+        return match.group(1).upper(), match.group(2)
+
+    match = RISK_TABLE_PATTERN.search(description)
+    if match:
+        rating = match.group(1).upper()
+        value_match = RISK_VALUE_PATTERN.search(description)
+        return rating, value_match.group(1) if value_match else None
+
+    match = RISK_LOOSE_PATTERN.search(description)
+    if match:
+        return match.group(1).upper(), match.group(2)
+
+    return None, None
 
 
 def extract_asset_table_from_markdown(description: str) -> List[Dict[str, str]]:

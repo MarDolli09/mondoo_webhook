@@ -16,7 +16,11 @@ class Settings(BaseSettings):
     SNOW_REQUESTED_FOR_SYS_ID: str
     MONDOO_GRAPHQL_MAX_PAGES: int = 50
     HTTP_TIMEOUT_SECONDS: float = 10.0
-    CVSS_SEARCH_LOG_INTERVAL: int = 10
+    CVSS_SEARCH_BUDGET_SECONDS: float = 20.0
+    ASSET_NAME_LOOKUP_CONCURRENCY: int = 10
+    ASSET_NAME_LOOKUP_LIMIT: int = 50
+    CVSS_MAX_FINDING_ATTEMPTS: int = 3
+    DESCRIPTION_ASSET_PREVIEW: int = 10
 
     CATEGORY_MAP: Dict[str, str] = {
         "eu-elastic-hodgkin-413342": "Azure",
