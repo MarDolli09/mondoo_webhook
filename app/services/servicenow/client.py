@@ -14,7 +14,10 @@ class ServiceNowClient:
     def __init__(self, http_client: httpx.AsyncClient):
         self.api = ServiceNowAPI(http_client)
  
-
+    # ------------------------------------------------------------------ #
+    # Einstiegspunkt
+    # ------------------------------------------------------------------ #
+ 
     async def process_payload(self, payload: ServiceNowPayload) -> Dict[str, Any]:
         correlation_id = mapping.correlation_id(payload)
         existing = await self.api.find_request_item_by_correlation_id(correlation_id)
@@ -34,7 +37,10 @@ class ServiceNowClient:
         logger.info(f"Bestehendes RITM {existing.get('number')} gefunden. Starte Update.")
         return await self._update(existing["sys_id"], payload)
  
-
+    # ------------------------------------------------------------------ #
+    # Anlegen
+    # ------------------------------------------------------------------ #
+ 
     async def _create(self, payload: ServiceNowPayload) -> Dict[str, Any]:
         request_sys_id = await self.api.order_catalog_item(mapping.build_variables(payload))
         ritm = await self.api.resolve_request_item(request_sys_id)
@@ -56,8 +62,11 @@ class ServiceNowClient:
             "attachment": attached,
             "action": "created",
         }
-
-
+ 
+    # ------------------------------------------------------------------ #
+    # Aktualisieren
+    # ------------------------------------------------------------------ #
+ 
     async def _update(self, ritm_sys_id: str, payload: ServiceNowPayload) -> Dict[str, Any]:
         body = await self._task_fields(payload, is_initial=False)
         updated = await self.api.patch_request_item(ritm_sys_id, body)
@@ -66,18 +75,31 @@ class ServiceNowClient:
         )
         return {**updated, "sys_id": ritm_sys_id, "action": "updated"}
  
+    # ------------------------------------------------------------------ #
+    # Bausteine
+    # ------------------------------------------------------------------ #
  
     async def _task_fields(
         self, payload: ServiceNowPayload, *, is_initial: bool
     ) -> Dict[str, Any]:
-        """Bindeglied zwischen Mapping und API: die Assignment Group ist ein
-        Referenzfeld und braucht eine sys_id, die erst aufgeloest werden muss."""
-        group_name = mapping.assignment_group_name(payload)
-        group_sys_id: Optional[str] = await self.api.resolve_group_sys_id(group_name)
-        return mapping.build_task_fields(
-            payload, is_initial=is_initial, group_sys_id=group_sys_id
-        )
 
+        group_sys_id = await self.api.resolve_group_sys_id(
+            mapping.assignment_group_name(payload)
+        )
+ 
+        watcher_sys_id: Optional[str] = None
+        if is_initial:
+            # Beobachter nur bei der Anlage - der Aufruf entfaellt bei Updates.
+            watcher = mapping.watcher_name(payload)
+            if watcher:
+                watcher_sys_id = await self.api.resolve_user_sys_id(watcher)
+ 
+        return mapping.build_task_fields(
+            payload,
+            is_initial=is_initial,
+            group_sys_id=group_sys_id,
+            watcher_sys_id=watcher_sys_id,
+        )
  
     async def _attach_full_text(
         self, ritm_sys_id: str, payload: ServiceNowPayload

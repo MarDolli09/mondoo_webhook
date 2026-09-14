@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
  
 import httpx
  
@@ -22,15 +22,16 @@ from .constants import (
     RETRYABLE_STATUS,
     RITM_RESOLVE_DELAYS,
     TABLE_REQUEST_ITEM,
+    TABLE_USER,
     TABLE_USER_GROUP,
 )
  
  
 class ServiceNowAPI:
-    # Aufgeloeste Assignment-Group-sys_ids. Klassenebene, weil der Client pro
-    # Request neu instanziiert wird.
-    _group_cache: Dict[str, str] = {}
-    _group_lock = asyncio.Lock()
+    # Aufgeloeste Referenzen (Tabelle, Feld, Wert) -> sys_id. Klassenebene,
+    # weil der Client pro Request neu instanziiert wird.
+    _reference_cache: Dict[Tuple[str, str, str], str] = {}
+    _reference_lock = asyncio.Lock()
  
     def __init__(self, http_client: httpx.AsyncClient, base_url: Optional[str] = None):
         self.http_client = http_client
@@ -170,7 +171,7 @@ class ServiceNowAPI:
     # ------------------------------------------------------------------ #
  
     async def order_catalog_item(self, variables: Dict[str, str]) -> str:
-
+        """Bestellt das Katalogformular und gibt die sys_id des REQ zurueck."""
         body: Dict[str, Any] = {"sysparm_quantity": "1", "variables": variables}
         if settings.SNOW_REQUESTED_FOR_SYS_ID:
             body["sysparm_requested_for"] = settings.SNOW_REQUESTED_FOR_SYS_ID
@@ -203,42 +204,60 @@ class ServiceNowAPI:
     # Referenzfelder
     # ------------------------------------------------------------------ #
  
-    async def resolve_group_sys_id(self, group_name: str) -> Optional[str]:
+    async def _resolve_reference(
+        self, table: str, field: str, value: str, *, label: str
+    ) -> Optional[str]:
 
         cls = ServiceNowAPI
-        if group_name in cls._group_cache:
-            return cls._group_cache[group_name]
+        cache_key = (table, field, value)
+        if cache_key in cls._reference_cache:
+            return cls._reference_cache[cache_key]
  
-        async with cls._group_lock:
-            if group_name in cls._group_cache:
-                return cls._group_cache[group_name]
+        async with cls._reference_lock:
+            if cache_key in cls._reference_cache:
+                return cls._reference_cache[cache_key]
  
             try:
                 records = await self._query_table(
-                    TABLE_USER_GROUP,
-                    query=f"name={group_name}",
-                    fields="sys_id,name",
+                    table, query=f"{field}={value}", fields="sys_id", limit=2
                 )
             except ServiceNowAPIError as exc:
-                logger.error(
-                    f"Aufloesung der Assignment Group '{group_name}' "
-                    f"fehlgeschlagen: {exc.message}"
-                )
+                logger.error(f"Aufloesung {label} '{value}' fehlgeschlagen: {exc.message}")
                 return None
  
             if not records:
                 logger.error(
-                    f"Assignment Group '{group_name}' existiert nicht in ServiceNow. "
-                    f"Das RITM wird ohne Gruppenzuweisung angelegt."
+                    f"{label} '{value}' existiert nicht in ServiceNow ({table}.{field})."
+                )
+                return None
+ 
+            if len(records) > 1:
+                # Anzeigenamen sind in sys_user nicht eindeutig. Lieber laut
+                # scheitern als stillschweigend den falschen Benutzer eintragen.
+                logger.error(
+                    f"{label} '{value}' ist in {table} nicht eindeutig. "
+                    f"Eindeutiges Merkmal verwenden, etwa email oder user_name."
                 )
                 return None
  
             sys_id = records[0]["sys_id"]
-            cls._group_cache[group_name] = sys_id
-            logger.info(
-                f"Assignment Group '{group_name}' aufgeloest und zwischengespeichert."
-            )
+            cls._reference_cache[cache_key] = sys_id
+            logger.info(f"{label} '{value}' aufgeloest und zwischengespeichert.")
             return sys_id
+ 
+    async def resolve_group_sys_id(self, group_name: str) -> Optional[str]:
+        return await self._resolve_reference(
+            TABLE_USER_GROUP, "name", group_name, label="Assignment Group"
+        )
+ 
+    async def resolve_user_sys_id(self, user_name: str) -> Optional[str]:
+
+        return await self._resolve_reference(
+            TABLE_USER,
+            settings.SNOW_USER_LOOKUP_FIELD,
+            user_name,
+            label="Benutzer",
+        )
  
     # ------------------------------------------------------------------ #
     # Anhaenge

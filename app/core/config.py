@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     ASSET_NAME_LOOKUP_LIMIT: int = 50
     CVSS_MAX_FINDING_ATTEMPTS: int = 3
     DESCRIPTION_ASSET_PREVIEW: int = 10
+    DEFAULT_WATCHER_SYS_ID: str = ""
+    DEFAULT_WATCHER: str = ""
+    SNOW_USER_LOOKUP_FIELD: str = "name"
 
     CATEGORY_MAP: Dict[str, str] = {
         "eu-elastic-hodgkin-413342": "Azure",
@@ -32,6 +35,11 @@ class Settings(BaseSettings):
         "eu-nifty-mendeleev-113214": "Server",
         "eu-great-goldwasser-976351": "VMware",
         "eu-sweet-sanderson-152264": "Windows-Clients",
+    }
+
+    USER_MAP: Dict[str, str] = {
+        "//captain.api.mondoo.app/users/3CnXrWtrHy64L3xt2SCzgJKX0OM": "Marius Dollinger",
+        "//captain.api.mondoo.app/users/2nFSVWcDIyqJLXA0A2xvpfU6pXg": "Lars Siefert",
     }
 
     ASSIGNMENTGROUP_MAP: Dict[str, str] = {

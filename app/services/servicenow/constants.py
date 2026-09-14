@@ -42,6 +42,7 @@ TOKEN_EXPIRY_MARGIN_SECONDS = 60.0
  
 TABLE_REQUEST_ITEM = "sc_req_item"
 TABLE_USER_GROUP = "sys_user_group"
+TABLE_USER = "sys_user"
  
 PATH_TABLE = "/api/now/table/{table}"
 PATH_TABLE_RECORD = "/api/now/table/{table}/{sys_id}"

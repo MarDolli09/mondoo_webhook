@@ -20,6 +20,10 @@ SPACE_ID_PATTERN = re.compile(r"/spaces/([^/]+)")
 FALLBACK_ASSIGNMENT_GROUP = "Mosca IT - Security"
  
  
+# ---------------------------------------------------------------------- #
+# Helfer
+# ---------------------------------------------------------------------- #
+ 
 def truncate(value: str, limit: int) -> str:
     if not value:
         return ""
@@ -51,6 +55,36 @@ def attachment_file_name(payload: ServiceNowPayload) -> str:
     cve_part = (payload.case.findingCVE or "").replace("/", "-").strip() or "details"
     return f"mondoo_finding_{cve_part}.md"
  
+ 
+def watcher_name(payload: ServiceNowPayload) -> Optional[str]:
+
+    case = payload.case
+    fallback = settings.DEFAULT_WATCHER or None
+ 
+    if case.isAutomated or not case.createdBy:
+        # Kein Benutzer im Payload: entweder ein Drift-Ticket oder ein Feld,
+        # das Mondoo nicht gefuellt hat. In beiden Faellen gibt es niemanden
+        # zu benachrichtigen ausser dem hinterlegten Standardempfaenger.
+        return fallback
+ 
+    mrn = case.createdBy.strip()
+    name = settings.USER_MAP.get(mrn)
+    if name:
+        return name
+ 
+    # Bewusst kein stiller Ausfall: Die Warnung ist die einzige Gelegenheit,
+    # Luecken in der USER_MAP zu bemerken. Die MRN steht ausserdem unveraendert
+    # in der Variablen mondoo_created_by, geht also nicht verloren.
+    logger.warning(
+        f"Mondoo-Benutzer '{mrn}' ist nicht in USER_MAP hinterlegt. "
+        f"{'Fallback auf DEFAULT_WATCHER.' if fallback else 'Kein Beobachter gesetzt.'}"
+    )
+    return fallback
+ 
+ 
+# ---------------------------------------------------------------------- #
+# Katalogvariablen
+# ---------------------------------------------------------------------- #
  
 def build_variables(payload: ServiceNowPayload) -> Dict[str, str]:
 
@@ -85,7 +119,11 @@ def build_variables(payload: ServiceNowPayload) -> Dict[str, str]:
         "mondoo_assets": json.dumps(mrvs_rows, ensure_ascii=False),
     }
  
-
+ 
+# ---------------------------------------------------------------------- #
+# Textfelder
+# ---------------------------------------------------------------------- #
+ 
 def _risk_line(payload: ServiceNowPayload) -> str:
     case = payload.case
     if case.cvssRiskRating or case.cvssScore:
@@ -109,6 +147,9 @@ def _description_header(payload: ServiceNowPayload) -> str:
  
     lines.append("")
  
+    # Bei einem Flotten-Rollup koennen das dreistellig viele Systeme sein. Die
+    # vollstaendige Liste steht im MRVS und im Anhang; hier nur ein Auszug,
+    # damit der Befundtext nicht aus dem Feld gedraengt wird.
     shown = case.remediations.table[: settings.DESCRIPTION_ASSET_PREVIEW]
     hidden = len(case.remediations.table) - len(shown)
  
@@ -161,6 +202,10 @@ def build_work_notes(payload: ServiceNowPayload, *, is_initial: bool) -> str:
     )
  
  
+# ---------------------------------------------------------------------- #
+# Task-Felder
+# ---------------------------------------------------------------------- #
+ 
 def _closing_fields(event_type: MondooEventType) -> Dict[str, Any]:
     if event_type is MondooEventType.CLOSED:
         return {
@@ -190,6 +235,7 @@ def build_task_fields(
     *,
     is_initial: bool,
     group_sys_id: Optional[str] = None,
+    watcher_sys_id: Optional[str] = None,
 ) -> Dict[str, Any]:
 
     case = payload.case
@@ -205,6 +251,10 @@ def build_task_fields(
  
     if is_initial:
         body["description"] = build_description(payload)
+        # Nur bei der Anlage: bei Updates wuerde ein Ueberschreiben die von
+        # Bearbeitern ergaenzten Beobachter entfernen.
+        if watcher_sys_id:
+            body["watch_list"] = watcher_sys_id
     else:
         # description bleibt bei Updates unangetastet, damit Ergaenzungen der
         # Bearbeiter nicht ueberschrieben werden.
