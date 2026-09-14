@@ -119,15 +119,6 @@ class BaseTicketParser(ABC):
     async def _fetch_asset_names(
         self, targets: List[Tuple[str, str, str]]
     ) -> Dict[str, str]:
-        """
-        Laedt Asset-Namen nebenlaeufig nach.
-
-        Sequenziell waeren das bei einem Flotten-Rollup mit 97 Assets 97 Aufrufe
-        hintereinander, jeder mit HTTP_TIMEOUT_SECONDS. Der Webhook liefe in den
-        Timeout, bevor ServiceNow ueberhaupt angesprochen wird. Oberhalb von
-        ASSET_NAME_LOOKUP_LIMIT wird ganz auf die Aufloesung verzichtet; dann
-        traegt die Asset-ID den Namen.
-        """
         if not self.client or not targets:
             return {}
 
@@ -215,14 +206,6 @@ class BaseTicketParser(ABC):
 
     @staticmethod
     def _resolve_origin(case_raw: Dict[str, Any]) -> Tuple[str, bool]:
-        """
-        Leitet aus case.createdBy ab, ob das Ticket manuell eroeffnet wurde.
-
-        HYPOTHESE: Manuell eroeffnete Tickets tragen eine Benutzer-MRN mit
-        /users/-Segment. Bei automatisch erzeugten Regressions-Tickets wird ein
-        leeres Feld oder eine System-MRN erwartet. An einem echten Drift-Payload
-        zu verifizieren, bevor darauf eine Filterlogik aufgebaut wird.
-        """
         created_by = case_raw.get("createdBy") or ""
         is_automated = "/users/" not in created_by
         return created_by, is_automated

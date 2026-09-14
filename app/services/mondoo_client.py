@@ -59,16 +59,7 @@ class MondooGraphQLClient:
     async def fetch_cvss_details(
         self, finding_mrn: str, scope_mrn: str = "", space_id: str = ""
     ) -> Tuple[Optional[str], Optional[str], Optional[int]]:
-        """
-        Sucht den CVSS-Score zu einem Befund über die paginierte Findings-Query.
-
-        Die Suche ist doppelt begrenzt: durch MONDOO_GRAPHQL_MAX_PAGES und durch
-        ein Zeitbudget. Letzteres ist der wirksamere Schutz, weil die Laufzeit
-        einer Seite nicht vorhersagbar ist. Wird das Budget überschritten, bricht
-        die Suche kontrolliert ab - der Befund wird dann ohne CVSS-Wert
-        weiterverarbeitet, statt den gesamten Webhook in einen Timeout laufen
-        zu lassen.
-        """
+        
         if not self.api_key or not finding_mrn:
             return None, None, None
 

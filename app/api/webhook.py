@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.core.exceptions import InvalidSecretKeyError, MondooBaseException
 from app.core.logging import logger
 from app.services.mondoo_client import MondooGraphQLClient
-from app.services.servicenow_client import ServiceNowClient
+from app.services.servicenow import ServiceNowClient
 from app.services.ticket_parser import TicketParserService
 
 router = APIRouter(prefix="/webhook/mondoo", tags=["Webhook"])

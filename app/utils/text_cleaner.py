@@ -71,20 +71,6 @@ def extract_single_asset_from_title(title: str) -> Optional[str]:
 
 
 def extract_risk_from_summary(description: str) -> Tuple[Optional[str], Optional[str]]:
-    """
-    Liest Mondoos Risikobewertung aus dem gerenderten Befundtext.
-
-    Rueckgabe: (Rating, Risk-Wert 0-100 als String) - beide optional.
-
-    Hintergrund: Fuer Fehlkonfigurationen existiert kein CVSS-Score, wohl aber
-    ein Mondoo Risk Rating. Es steht im Text ("The combined risk is CRITICAL
-    (99/100)") und ist damit ohne zusaetzlichen API-Aufruf verfuegbar.
-
-    ACHTUNG: Die Extraktion haengt am Ausgabeformat von Mondoo. Genau daran ist
-    Mondoos eigene ServiceNow-App gescheitert, deren Regex noch das V1-Format
-    erwartet. Deshalb sind hier mehrere Formate hinterlegt, und der Aufrufer
-    protokolliert, ob die Extraktion gegriffen hat.
-    """
     if not description:
         return None, None
 

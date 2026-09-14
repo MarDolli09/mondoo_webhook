@@ -5,8 +5,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class MondooEventType(str, Enum):
-    """Normalisierte Ereignisarten des Mondoo-Webhooks."""
-
     CREATED = "created"
     UPDATED = "updated"
     DELETED = "deleted"
@@ -14,10 +12,6 @@ class MondooEventType(str, Enum):
     UNKNOWN = "unknown"
 
 
-# Mondoo sendet Werte wie "TYPE_CREATED". Das Praefix wird entfernt, der Rest
-# ueber diese Tabelle aufgeloest. Der Schalter "Send close notifications" an der
-# Webhook-Integration erzeugt ein Ereignis beim Aufloesen eines Tickets; ob es
-# als CLOSED oder RESOLVED uebermittelt wird, deckt das Mapping beidseitig ab.
 _EVENT_ALIASES = {
     "CREATED": MondooEventType.CREATED,
     "UPDATED": MondooEventType.UPDATED,
