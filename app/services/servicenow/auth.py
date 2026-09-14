@@ -5,7 +5,7 @@ from typing import Dict, Optional
 import httpx
  
 from app.core.config import settings
-from app.core.exceptions import ServiceNowAPIError
+from app.core.exceptions import ServiceNowAuthError
 from app.core.logging import logger
  
 from .constants import PATH_OAUTH_TOKEN, TOKEN_EXPIRY_MARGIN_SECONDS
@@ -46,7 +46,6 @@ class ServiceNowAuth:
  
     @classmethod
     def invalidate(cls) -> None:
-        """Nach einem 401 aufzurufen, damit der naechste Versuch neu anmeldet."""
         cls._token = None
         cls._token_expires_at = 0.0
  
@@ -84,10 +83,10 @@ class ServiceNowAuth:
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
         except httpx.HTTPError as exc:
-            raise ServiceNowAPIError(f"Verbindungsfehler beim OAuth-Handshake: {exc}")
+            raise ServiceNowAuthError(f"Verbindungsfehler beim OAuth-Handshake: {exc}")
  
         if response.status_code != 200:
-            raise ServiceNowAPIError(
+            raise ServiceNowAuthError(
                 f"OAuth Token-Generierung fehlgeschlagen ({response.status_code})",
                 status_code=401 if response.status_code == 401 else 502,
             )
@@ -95,6 +94,6 @@ class ServiceNowAuth:
         body = response.json()
         token = body.get("access_token")
         if not token:
-            raise ServiceNowAPIError("OAuth-Antwort enthaelt kein access_token")
+            raise ServiceNowAuthError("OAuth-Antwort enthaelt kein access_token")
  
         return token, float(body.get("expires_in", 1800))
