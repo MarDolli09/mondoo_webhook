@@ -10,9 +10,11 @@ from app.utils.text_cleaner import sanitize_url
 from .constants import (
     CORRELATION_ID_MAX,
     DESCRIPTION_MAX,
+    FIXED_WATCHERS,
     SHORT_DESCRIPTION_MAX,
     STATE_CLOSED_COMPLETE,
     STATE_CLOSED_SKIPPED,
+    STATE_OPEN,
 )
  
 SPACE_ID_PATTERN = re.compile(r"/spaces/([^/]+)")
@@ -56,42 +58,25 @@ def attachment_file_name(payload: ServiceNowPayload) -> str:
     return f"mondoo_finding_{cve_part}.md"
  
  
-def watcher_name(payload: ServiceNowPayload) -> Optional[str]:
-
+def watcher_names(payload: ServiceNowPayload) -> List[str]:
     case = payload.case
-    fallback = settings.DEFAULT_WATCHER or None
- 
-    if case.isAutomated or not case.createdBy:
-        # Kein Benutzer im Payload: entweder ein Drift-Ticket oder ein Feld,
-        # das Mondoo nicht gefuellt hat. In beiden Faellen gibt es niemanden
-        # zu benachrichtigen ausser dem hinterlegten Standardempfaenger.
-        return fallback
- 
-    mrn = case.createdBy.strip()
-    name = settings.USER_MAP.get(mrn)
-    if name:
-        return name
- 
-    # Bewusst kein stiller Ausfall: Die Warnung ist die einzige Gelegenheit,
-    # Luecken in der USER_MAP zu bemerken. Die MRN steht ausserdem unveraendert
-    # in der Variablen mondoo_created_by, geht also nicht verloren.
-    logger.warning(
-        f"Mondoo-Benutzer '{mrn}' ist nicht in USER_MAP hinterlegt. "
-        f"{'Fallback auf DEFAULT_WATCHER.' if fallback else 'Kein Beobachter gesetzt.'}"
-    )
-    return fallback
- 
- 
+    watchers = list(FIXED_WATCHERS)
+
+    # Wenn menschlicher Ersteller vorhanden: Namen über USER_MAP auflösen
+    if not case.isAutomated and case.createdBy:
+        creator_name = settings.USER_MAP.get(case.createdBy.strip())
+        if creator_name and creator_name not in watchers:
+            watchers.append(creator_name)
+
+    return watchers
+
 # ---------------------------------------------------------------------- #
 # Katalogvariablen
 # ---------------------------------------------------------------------- #
  
 def build_variables(payload: ServiceNowPayload) -> Dict[str, str]:
-
     case = payload.case
- 
-    # Ein MRVS erwartet den kompletten Zeilensatz als EIN JSON-String,
-    # nicht als natives Array.
+
     mrvs_rows: List[Dict[str, str]] = [
         {
             "asset_name": asset.asset_name_name,
@@ -100,7 +85,7 @@ def build_variables(payload: ServiceNowPayload) -> Dict[str, str]:
         }
         for asset in case.remediations.table
     ]
- 
+
     return {
         "mondoo_mrn": correlation_id(payload),
         "mondoo_title": truncate(case.title, SHORT_DESCRIPTION_MAX),
@@ -109,7 +94,6 @@ def build_variables(payload: ServiceNowPayload) -> Dict[str, str]:
         "cvss_rating": case.cvssRiskRating or "",
         "risk_rating": case.riskRating or "",
         "risk_score": case.riskScore or "",
-        "priority_source": case.prioritySource,
         "mondoo_space": case.mondooSpace or "",
         "finding_type": case.ticketType or "",
         "ticket_url": sanitize_url(case.ticket_url),
@@ -147,9 +131,7 @@ def _description_header(payload: ServiceNowPayload) -> str:
  
     lines.append("")
  
-    # Bei einem Flotten-Rollup koennen das dreistellig viele Systeme sein. Die
-    # vollstaendige Liste steht im MRVS und im Anhang; hier nur ein Auszug,
-    # damit der Befundtext nicht aus dem Feld gedraengt wird.
+
     shown = case.remediations.table[: settings.DESCRIPTION_ASSET_PREVIEW]
     hidden = len(case.remediations.table) - len(shown)
  
@@ -163,36 +145,31 @@ def _description_header(payload: ServiceNowPayload) -> str:
  
  
 def build_description(payload: ServiceNowPayload) -> str:
+    case = payload.case
+    lines = [
+        f"Mondoo Security Finding | {case.mondooSpace} | {case.ticketType}",
+        f"CVE: {case.findingCVE}   {_risk_line(payload)}",
+        f"Betroffene Assets: {case.assetsCount}",
+        f"Mondoo-Ticket: {sanitize_url(case.ticket_url)}",
+    ]
 
-    head = _description_header(payload)
-    remaining = DESCRIPTION_MAX - len(head)
- 
-    if remaining <= 0:
-        return head[:DESCRIPTION_MAX]
- 
-    body = payload.case.description or ""
-    if len(body) <= remaining:
-        return head + body
- 
-    hint = "\n\n[Gekuerzt. Der vollstaendige Befundtext liegt diesem Ticket als Anhang bei.]"
-    cut = max(0, remaining - len(hint))
-    snippet = body[:cut]
-    # An der letzten Absatzgrenze schneiden, damit kein Satz zerrissen wird
-    boundary = snippet.rfind("\n\n")
-    if boundary > cut * 0.5:
-        snippet = snippet[:boundary]
-    return head + snippet + hint
+    lines.append("")
+    shown = case.remediations.table[: settings.DESCRIPTION_ASSET_PREVIEW]
+    hidden = len(case.remediations.table) - len(shown)
+
+    lines.append("Betroffene Systeme (Auszug):" if hidden else "Betroffene Systeme:")
+    lines.extend(f"  - {a.asset_name_name} ({a.platform})" for a in shown)
+    if hidden > 0:
+        lines.append(f"  ... und {hidden} weitere (siehe Formularvariablen)")
+
+    return "\n".join(lines)[:DESCRIPTION_MAX]
  
  
 def build_work_notes(payload: ServiceNowPayload, *, is_initial: bool) -> str:
     case = payload.case
     if is_initial:
-        origin = case.createdBy or "unbekannt"
-        suffix = " (automatisch erzeugt)" if case.isAutomated else ""
         return (
             f"Automatisch angelegt aus Mondoo-Ticket.\n"
-            f"MRN: {case.mrn}\n"
-            f"Eroeffnet durch: {origin}{suffix}\n"
             f"Mondoo createdAt: {case.createdAt}"
         )
     return (
@@ -235,30 +212,32 @@ def build_task_fields(
     *,
     is_initial: bool,
     group_sys_id: Optional[str] = None,
-    watcher_sys_id: Optional[str] = None,
+    opened_by_sys_id: Optional[str] = None,
+    watcher_sys_ids: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
-
     case = payload.case
- 
+
     body: Dict[str, Any] = {
         "urgency": case.urgency,
         "impact": case.impact,
         "work_notes": build_work_notes(payload, is_initial=is_initial),
     }
- 
+
     if group_sys_id:
         body["assignment_group"] = group_sys_id
- 
+
     if is_initial:
+        body["state"] = STATE_OPEN
         body["description"] = build_description(payload)
-        # Nur bei der Anlage: bei Updates wuerde ein Ueberschreiben die von
-        # Bearbeitern ergaenzten Beobachter entfernen.
-        if watcher_sys_id:
-            body["watch_list"] = watcher_sys_id
+        
+        if opened_by_sys_id:
+            body["opened_by"] = opened_by_sys_id
+
+        if watcher_sys_ids:
+            # GlideList erwartet kommagetrennte Sys-IDs
+            body["watch_list"] = ",".join(watcher_sys_ids)
     else:
-        # description bleibt bei Updates unangetastet, damit Ergaenzungen der
-        # Bearbeiter nicht ueberschrieben werden.
         body["short_description"] = truncate(case.title, SHORT_DESCRIPTION_MAX)
- 
+
     body.update(_closing_fields(case.eventType))
     return body

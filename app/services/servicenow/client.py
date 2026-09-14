@@ -7,7 +7,7 @@ from app.models.schemas import ServiceNowPayload
  
 from . import mapping
 from .api import ServiceNowAPI
-from .constants import TABLE_REQUEST_ITEM, TERMINAL_STATES
+from .constants import (TABLE_REQUEST_ITEM, TERMINAL_STATES, OPENED_BY_SYSTEM, OPENED_BY_USER,)
  
  
 class ServiceNowClient:
@@ -45,21 +45,21 @@ class ServiceNowClient:
         request_sys_id = await self.api.order_catalog_item(mapping.build_variables(payload))
         ritm = await self.api.resolve_request_item(request_sys_id)
         ritm_sys_id = ritm["sys_id"]
- 
+
         body = await self._task_fields(payload, is_initial=True)
         updated = await self.api.patch_request_item(ritm_sys_id, body)
- 
-        attached = await self._attach_full_text(ritm_sys_id, payload)
- 
+
+        # Anhang bewusst entfernt (Ticket bleibt schlank, Original-Link ist vorhanden)
+
         number = updated.get("number") or ritm.get("number")
-        logger.info(f"RITM {number} angelegt und befuellt.")
- 
+        logger.info(f"RITM {number} schlank angelegt (Status: Offen).")
+
         return {
             **updated,
             "number": number,
             "sys_id": ritm_sys_id,
             "request_sys_id": request_sys_id,
-            "attachment": attached,
+            "attachment": False,
             "action": "created",
         }
  
@@ -82,23 +82,35 @@ class ServiceNowClient:
     async def _task_fields(
         self, payload: ServiceNowPayload, *, is_initial: bool
     ) -> Dict[str, Any]:
-
         group_sys_id = await self.api.resolve_group_sys_id(
             mapping.assignment_group_name(payload)
         )
- 
-        watcher_sys_id: Optional[str] = None
+
+        opened_by_sys_id: Optional[str] = None
+        watcher_sys_ids: List[str] = []
+
         if is_initial:
-            # Beobachter nur bei der Anlage - der Aufruf entfaellt bei Updates.
-            watcher = mapping.watcher_name(payload)
-            if watcher:
-                watcher_sys_id = await self.api.resolve_user_sys_id(watcher)
- 
+            # 1. Geöffnet von ermitteln
+            opened_by_target = OPENED_BY_SYSTEM if payload.case.isAutomated else OPENED_BY_USER
+            opened_by_sys_id = await self.api.resolve_user_sys_id(opened_by_target)
+            if not opened_by_sys_id:
+                logger.warning(f"Konnte User '{opened_by_target}' in sys_user nicht finden.")
+
+            # 2. Beobachterliste ermitteln (Lars + Alexander + optional User)
+            target_watchers = mapping.watcher_names(payload)
+            for name in target_watchers:
+                w_id = await self.api.resolve_user_sys_id(name)
+                if w_id:
+                    watcher_sys_ids.append(w_id)
+                else:
+                    logger.warning(f"Beobachter '{name}' konnte in ServiceNow nicht aufgelöst werden.")
+
         return mapping.build_task_fields(
             payload,
             is_initial=is_initial,
             group_sys_id=group_sys_id,
-            watcher_sys_id=watcher_sys_id,
+            opened_by_sys_id=opened_by_sys_id,
+            watcher_sys_ids=watcher_sys_ids if watcher_sys_ids else None,
         )
  
     async def _attach_full_text(

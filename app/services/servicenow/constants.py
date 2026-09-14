@@ -1,4 +1,25 @@
 # ---------------------------------------------------------------------- #
+# RITM-Zustaende
+# ---------------------------------------------------------------------- #
+STATE_OPEN = "1"  # Standard-Status 'Offen'
+STATE_CLOSED_COMPLETE = "3"
+STATE_CLOSED_INCOMPLETE = "4"
+STATE_CLOSED_SKIPPED = "7"
+
+TERMINAL_STATES = (
+    STATE_CLOSED_COMPLETE,
+    STATE_CLOSED_INCOMPLETE,
+    STATE_CLOSED_SKIPPED,
+)
+
+# ---------------------------------------------------------------------- #
+# Benutzer & Beobachter
+# ---------------------------------------------------------------------- #
+OPENED_BY_USER = "User_Mondoo_API"
+OPENED_BY_SYSTEM = "System_Mondoo_API"
+FIXED_WATCHERS = ("Lars Siefert", "Alexander Haller")
+
+# ---------------------------------------------------------------------- #
 # Feldgrenzen der task-Tabelle
 # ---------------------------------------------------------------------- #
  
