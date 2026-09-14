@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional, Tuple
 from app.models.schemas import AssetRemediation
-from app.services.mondoo_client import MondooGraphQLClient
+from app.services.mondoo import MondooGraphQLClient
 from app.services.parsers.base import BaseTicketParser
 
 

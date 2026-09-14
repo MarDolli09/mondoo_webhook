@@ -12,7 +12,7 @@ from app.models.schemas import (
     ServiceNowPayload,
     map_event_type,
 )
-from app.services.mondoo_client import MondooGraphQLClient
+from app.services.mondoo import MondooGraphQLClient
 from app.utils import text_cleaner
 
 

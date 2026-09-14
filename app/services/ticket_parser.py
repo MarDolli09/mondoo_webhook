@@ -1,7 +1,7 @@
 from typing import Any, Dict, Optional, Tuple
 from app.core.config import settings
 from app.models.schemas import ServiceNowPayload
-from app.services.mondoo_client import MondooGraphQLClient
+from app.services.mondoo import MondooGraphQLClient
 from app.services.parsers.advisories import AdvisoriesParser
 from app.services.parsers.base import BaseTicketParser
 from app.services.parsers.default import DefaultParser

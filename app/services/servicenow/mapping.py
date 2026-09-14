@@ -4,7 +4,11 @@ from typing import Any, Dict, List, Optional
 
 from app.core.config import settings
 from app.core.logging import logger
-from app.models.schemas import MondooEventType, ServiceNowPayload
+from app.models.schemas import (
+    MondooEventType,
+    ServiceNowCase,
+    ServiceNowPayload,
+)
 from app.utils.text_cleaner import sanitize_url
 
 from .constants import (

@@ -1,5 +1,5 @@
 from typing import Any, Dict, Optional, Tuple
-from app.services.mondoo_client import MondooGraphQLClient
+from app.services.mondoo import MondooGraphQLClient
 from app.services.parsers.base import BaseTicketParser
 
 
