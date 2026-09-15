@@ -160,8 +160,6 @@ class BaseTicketParser(ABC):
             targets.append((space_id, asset_id, scope_mrn))
 
         if not targets:
-            # Kein verwertbarer Ref vorhanden: dann ist der Befundtext die
-            # einzige Quelle, auch wenn er ungenau ist.
             if text_index:
                 logger.warning(
                     f"Keine auswertbaren Refs im Case. Verwende ersatzweise die "
@@ -219,7 +217,7 @@ class BaseTicketParser(ABC):
     @staticmethod
     def _resolve_origin(case_raw: Dict[str, Any]) -> Tuple[str, bool]:
         created_by = case_raw.get("createdBy") or ""
-        is_automated = "/users/" not in created_by
+        is_automated = "//iam.api.mondoo.app/identity/user/system" in created_by
         return created_by, is_automated
 
     # ------------------------------------------------------------------ #
@@ -262,8 +260,7 @@ class BaseTicketParser(ABC):
 
         if is_automated:
             logger.warning(
-                f"Ticket ohne Benutzer-MRN in createdBy ('{created_by}'). "
-                f"Moeglicherweise automatisch erzeugtes Regressions-Ticket."
+                f"Automatisch erzeugtes Ticket."
             )
 
         cleaned_payload = ServiceNowPayload(
