@@ -26,7 +26,7 @@ from .constants import (
 )
  
  
-class ServiceNowAPI:s
+class ServiceNowAPI:
     _reference_cache: Dict[Tuple[str, str, str], str] = {}
     _reference_lock = asyncio.Lock()
  
