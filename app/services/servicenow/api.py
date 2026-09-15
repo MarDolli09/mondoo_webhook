@@ -14,7 +14,6 @@ from app.core.logging import logger
 from .auth import ServiceNowAuth
 from .constants import (
     DEFAULT_MAX_RETRIES,
-    PATH_ATTACHMENT,
     PATH_ORDER_NOW,
     PATH_SUBMIT_ORDER,
     PATH_TABLE,
@@ -27,9 +26,7 @@ from .constants import (
 )
  
  
-class ServiceNowAPI:
-    # Aufgeloeste Referenzen (Tabelle, Feld, Wert) -> sys_id. Klassenebene,
-    # weil der Client pro Request neu instanziiert wird.
+class ServiceNowAPI:s
     _reference_cache: Dict[Tuple[str, str, str], str] = {}
     _reference_lock = asyncio.Lock()
  
