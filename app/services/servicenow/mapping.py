@@ -13,7 +13,6 @@ from app.utils.text_cleaner import sanitize_url
 
 from .constants import (
     CORRELATION_ID_MAX,
-    DESCRIPTION_MAX,
     FIXED_WATCHERS,
     SHORT_DESCRIPTION_MAX,
     STATE_CLOSED_COMPLETE,
@@ -94,7 +93,6 @@ def build_variables(payload: ServiceNowPayload) -> Dict[str, str]:
     ]
 
     return {
-        "mondoo_mrn": correlation_id(payload),
         "mondoo_title": truncate(case.title, SHORT_DESCRIPTION_MAX),
         "mondoo_cve": case.findingCVE or "",
         "cvss_score": case.cvssScore or "",
@@ -106,7 +104,6 @@ def build_variables(payload: ServiceNowPayload) -> Dict[str, str]:
         "ticket_url": sanitize_url(case.ticket_url),
         "assets_count": str(case.assetsCount),
         "mondoo_created_by": resolve_creator_name(case),
-        "mondoo_policies": case.policies or "",
         "mondoo_assets": json.dumps(mrvs_rows, ensure_ascii=False),
     }
 
@@ -115,37 +112,6 @@ def build_variables(payload: ServiceNowPayload) -> Dict[str, str]:
 # Textfelder
 # ---------------------------------------------------------------------- #
 
-def _risk_line(payload: ServiceNowPayload) -> str:
-    case = payload.case
-    if case.cvssRiskRating or case.cvssScore:
-        return f"CVSS: {case.cvssScore or '-'} ({case.cvssRiskRating or '-'})"
-    if case.riskRating:
-        suffix = f" ({case.riskScore}/100)" if case.riskScore else ""
-        return f"Mondoo Risk: {case.riskRating}{suffix}"
-    return "Risikobewertung: nicht ermittelbar"
-
-
-def build_description(payload: ServiceNowPayload) -> str:
-    case = payload.case
-    lines = [
-        f"Mondoo Security Finding | {case.mondooSpace} | {case.ticketType}",
-        f"CVE: {case.findingCVE}   {_risk_line(payload)}",
-        f"Betroffene Assets: {case.assetsCount}",
-        f"Mondoo-Ticket: {sanitize_url(case.ticket_url)}",
-    ]
-    if case.policies:
-        lines.append(f"Policy: {case.policies}")
-
-    lines.append("")
-    shown = case.remediations.table[: settings.DESCRIPTION_ASSET_PREVIEW]
-    hidden = len(case.remediations.table) - len(shown)
-
-    lines.append("Betroffene Systeme (Auszug):" if hidden else "Betroffene Systeme:")
-    lines.extend(f"  - {a.asset_name_name} ({a.platform})" for a in shown)
-    if hidden > 0:
-        lines.append(f"  ... und {hidden} weitere (siehe Formularvariablen)")
-
-    return "\n".join(lines)[:DESCRIPTION_MAX]
 
 
 def build_work_notes(payload: ServiceNowPayload, *, is_initial: bool) -> str:
@@ -209,7 +175,7 @@ def build_task_fields(
 
     if is_initial:
         body["state"] = STATE_OPEN
-        body["description"] = build_description(payload)
+        body["correlation_id"] = correlation_id(payload)
         
         if opened_by_sys_id:
             body["opened_by"] = opened_by_sys_id
