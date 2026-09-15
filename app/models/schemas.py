@@ -20,6 +20,10 @@ _EVENT_ALIASES = {
     "RESOLVED": MondooEventType.CLOSED,
 }
 
+CLOSING_EVENTS = (MondooEventType.CLOSED, MondooEventType.DELETED)
+
+CASE_STATUS_CLOSED = "CASE_CLOSED"
+
 
 def map_event_type(raw_type: str) -> MondooEventType:
     if not raw_type:
@@ -43,6 +47,8 @@ class RemediationTable(BaseModel):
 class ServiceNowCase(BaseModel):
     # Rohwert aus dem Payload (z. B. "TYPE_CREATED"), bleibt fuer das Logging erhalten
     ticketState: str
+    # Statusfeld des Case, z. B. CASE_CLOSED. Leer bei aelteren Payloads.
+    caseStatus: str = ""
     # Normalisierte Ereignisart, steuert die Schliesslogik im ServiceNowClient
     eventType: MondooEventType = MondooEventType.UNKNOWN
 

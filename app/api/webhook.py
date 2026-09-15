@@ -44,6 +44,7 @@ def get_ticket_parser_service(
  
  
 def verify_secret_key(secret_key: str) -> None:
+
     expected = settings.WEBHOOK_SECRET_KEY.get_secret_value()
     if not expected:
         raise ConfigurationError("WEBHOOK_SECRET_KEY ist nicht gesetzt.")
@@ -125,6 +126,8 @@ async def receive_mondoo_webhook(
                 "ticket_type": detected_type,
                 "mondoo_event": case.ticketState,
                 "mapped_event": case.eventType.value,
+                "case_status": case.caseStatus or None,
+                "creator": case.createdBy or None,
                 "snow_action": snow_record.get("action"),
                 "servicenow_ritm": snow_record.get("number"),
                 "servicenow_sys_id": snow_record.get("sys_id"),

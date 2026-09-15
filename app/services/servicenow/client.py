@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from app.core.logging import logger
-from app.models.schemas import ServiceNowPayload
+from app.models.schemas import CLOSING_EVENTS, ServiceNowPayload
 
 from . import mapping
 from .api import ServiceNowAPI
@@ -27,6 +27,13 @@ class ServiceNowClient:
         existing = await self.api.find_request_item_by_correlation_id(correlation_id)
 
         if existing is None:
+            if payload.case.eventType in CLOSING_EVENTS:
+                logger.info(
+                    f"Ereignis '{payload.case.ticketState}' ohne bestehendes RITM "
+                    f"zu '{correlation_id}'. Es wird kein Ticket angelegt."
+                )
+                return {"action": "skipped_closing_without_ritm"}
+
             logger.info(f"Kein RITM zu '{correlation_id}' vorhanden. Lege neuen Request an.")
             return await self._create(payload)
 

@@ -1,4 +1,5 @@
 import asyncio
+import re
 from abc import ABC
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -6,7 +7,10 @@ from app.core.config import settings
 from app.core.logging import logger
 from app.domain.priority import resolve_priority_mapping
 from app.models.schemas import (
+    CASE_STATUS_CLOSED,
+    CLOSING_EVENTS,
     AssetRemediation,
+    MondooEventType,
     RemediationTable,
     ServiceNowCase,
     ServiceNowPayload,
@@ -14,6 +18,10 @@ from app.models.schemas import (
 )
 from app.services.mondoo import MondooGraphQLClient
 from app.utils import text_cleaner
+
+HUMAN_USER_MRN_PATTERN = re.compile(r"/users/[^/]+$")
+SYSTEM_IDENTITY_SUFFIXES = ("/system",)
+SYSTEM_IDENTITY_MARKERS = ("/serviceaccounts/", "/identity/user/system")
 
 
 class BaseTicketParser(ABC):
@@ -216,9 +224,17 @@ class BaseTicketParser(ABC):
 
     @staticmethod
     def _resolve_origin(case_raw: Dict[str, Any]) -> Tuple[str, bool]:
-        created_by = case_raw.get("createdBy") or ""
-        is_automated = "//iam.api.mondoo.app/identity/user/system" in created_by
-        return created_by, is_automated
+        created_by = (case_raw.get("createdBy") or "").strip()
+        lowered = created_by.lower()
+ 
+        if not created_by:
+            return created_by, True
+        if lowered.endswith(SYSTEM_IDENTITY_SUFFIXES):
+            return created_by, True
+        if any(marker in lowered for marker in SYSTEM_IDENTITY_MARKERS):
+            return created_by, True
+        
+        return created_by, HUMAN_USER_MRN_PATTERN.search(created_by) is None
 
     # ------------------------------------------------------------------ #
     # Einstiegspunkt
@@ -231,15 +247,28 @@ class BaseTicketParser(ABC):
         title = case_raw.get("title", "")
         owner_mrn = case_raw.get("ownerMrn", "")
         space_id = text_cleaner.extract_space_id(owner_mrn)
-
-        assets = await self._resolve_assets(case_raw, title, description)
-
+ 
+        raw_event_type = data.get("type", "")
+        case_status = case_raw.get("status", "") or ""
+        event_type = map_event_type(raw_event_type)
+ 
+        if event_type is MondooEventType.UNKNOWN and case_status == CASE_STATUS_CLOSED:
+            logger.warning(
+                f"Unbekannter Ereignistyp '{raw_event_type}', Case-Status ist "
+                f"'{case_status}'. Wird als Abschluss behandelt."
+            )
+            event_type = MondooEventType.CLOSED
+ 
+        is_closing = event_type in CLOSING_EVENTS
+ 
+        assets = await self._resolve_assets(
+            case_raw, title, description, resolve_names=not is_closing
+        )
+ 
         cvss_score, cvss_risk_rating, cvss_found_on_page = await self._resolve_cvss_details(
             case_raw, owner_mrn=owner_mrn, space_id=space_id or ""
         )
-
-        # Fallback fuer Befunde ohne CVSS (insbesondere Fehlkonfigurationen):
-        # Mondoos Risk Rating steht im gerenderten Befundtext.
+ 
         risk_rating, risk_score = text_cleaner.extract_risk_from_summary(description)
         if risk_rating:
             logger.info(f"Mondoo Risk Rating aus Befundtext gelesen: {risk_rating} ({risk_score or '-'}/100)")
@@ -248,25 +277,26 @@ class BaseTicketParser(ABC):
                 "Weder CVSS-Rating noch Mondoo Risk Rating ermittelbar. "
                 "Priorisierung faellt auf Titel-Praefix bzw. Default zurueck."
             )
-
+ 
         urgency, impact, priority_source = self._resolve_urgency_and_impact(
             title, cvss_risk_rating, risk_rating
         )
         logger.info(f"Priorisierung ueber '{priority_source}' -> urgency={urgency}, impact={impact}")
-
-        raw_event_type = data.get("type", "")
+ 
         created_by, is_automated = self._resolve_origin(case_raw)
         policies = (case_raw.get("tags") or {}).get("policies", "")
-
+ 
         if is_automated:
             logger.warning(
-                f"Automatisch erzeugtes Ticket."
+                f"Ticket ohne Benutzer-MRN in createdBy ('{created_by}'). "
+                f"Moeglicherweise automatisch erzeugtes Regressions-Ticket."
             )
-
+ 
         cleaned_payload = ServiceNowPayload(
             case=ServiceNowCase(
                 ticketState=raw_event_type,
-                eventType=map_event_type(raw_event_type),
+                caseStatus=case_status,
+                eventType=event_type,
                 mrn=case_raw.get("mrn", ""),
                 ownerMrn=owner_mrn,
                 mondooSpace=settings.CATEGORY_MAP.get(space_id, space_id or ""),
@@ -291,11 +321,10 @@ class BaseTicketParser(ABC):
                 remediations=RemediationTable(table=assets),
             )
         )
-
+ 
         logger.info(f"================ [{self.ticket_type_name.upper()}] BEREINIGTER PAYLOAD ================")
-        # description ist mehrere Tausend Zeichen lang und wuerde das Log fluten.
         logger.info(cleaned_payload.model_dump_json(indent=2, exclude={"case": {"description"}}))
         logger.info(f"description: {len(description)} Zeichen (im Log ausgelassen)")
         logger.info("=======================================================================")
-
+ 
         return cleaned_payload, cvss_found_on_page

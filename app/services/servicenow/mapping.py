@@ -165,10 +165,17 @@ def build_task_fields(
     case = payload.case
 
     body: Dict[str, Any] = {
-        "urgency": case.urgency,
-        "impact": case.impact,
         "work_notes": build_work_notes(payload, is_initial=is_initial),
     }
+
+    if is_initial or case.prioritySource != "default":
+        body["urgency"] = case.urgency
+        body["impact"] = case.impact
+    else:
+        logger.info(
+            "Prioritaet nicht ermittelbar (Quelle 'default'). urgency/impact "
+            "bleiben unveraendert."
+        )
 
     if group_sys_id:
         body["assignment_group"] = group_sys_id
