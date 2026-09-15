@@ -21,7 +21,6 @@ from app.services.ticket_parser import TicketParserService
  
 router = APIRouter(prefix="/webhook/mondoo", tags=["Webhook"])
  
-# Header, die niemals protokolliert werden
 _SENSITIVE_HEADERS = {"authorization", "cookie", "proxy-authorization", "x-api-key"}
  
 _headers_logged = False
@@ -45,10 +44,11 @@ def get_ticket_parser_service(
  
  
 def verify_secret_key(secret_key: str) -> None:
-    if not settings.WEBHOOK_SECRET_KEY:
+    expected = settings.WEBHOOK_SECRET_KEY.get_secret_value()
+    if not expected:
         raise ConfigurationError("WEBHOOK_SECRET_KEY ist nicht gesetzt.")
  
-    if not secrets.compare_digest(secret_key, settings.WEBHOOK_SECRET_KEY):
+    if not secrets.compare_digest(secret_key, expected):
         raise InvalidSecretKeyError()
  
  
@@ -92,9 +92,6 @@ async def receive_mondoo_webhook(
  
     normalized = parser_service.normalize_payload(payload)
  
-    # Ohne case-Block entstuende ein Ticket ohne Titel, ohne MRN und damit ohne
-    # Korrelationsschluessel. Lieber hier abbrechen als eine Leiche in
-    # ServiceNow anlegen.
     case_raw = normalized.get("case")
     if not isinstance(case_raw, dict) or not case_raw.get("mrn"):
         raise PayloadParsingError("case fehlt oder enthaelt keine mrn.")

@@ -20,9 +20,10 @@ NO_DETAILS: CvssDetails = (None, None, None)
  
 class MondooGraphQLClient:
     def __init__(
-        self, http_client: httpx.AsyncClient, api_key: str = settings.MONDOO_API_KEY
+        self, http_client: httpx.AsyncClient, api_key: Optional[str] = None
     ):
-        self.api = MondooGraphQLAPI(http_client, (api_key or "").strip())
+        key = api_key if api_key is not None else settings.MONDOO_API_KEY.get_secret_value()
+        self.api = MondooGraphQLAPI(http_client, (key or "").strip())
  
     # ------------------------------------------------------------------ #
     # Asset-Namen

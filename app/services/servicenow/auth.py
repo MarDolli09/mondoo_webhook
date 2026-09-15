@@ -20,9 +20,6 @@ class ServiceNowAuth:
         self.http_client = http_client
         self.base_url = base_url
  
-    # ------------------------------------------------------------------ #
-    # Modus
-    # ------------------------------------------------------------------ #
  
     @property
     def uses_oauth(self) -> bool:
@@ -32,7 +29,7 @@ class ServiceNowAuth:
         """httpx-Auth-Objekt fuer Basic Auth, None im OAuth-Modus."""
         if self.uses_oauth:
             return None
-        return httpx.BasicAuth(settings.SNOW_USER, settings.SNOW_PASSWORD)
+        return httpx.BasicAuth(settings.SNOW_USER, settings.SNOW_PASSWORD.get_secret_value())
  
     async def headers(self, content_type: str = "application/json") -> Dict[str, str]:
         headers = {"Accept": "application/json", "Content-Type": content_type}
@@ -40,9 +37,6 @@ class ServiceNowAuth:
             headers["Authorization"] = f"Bearer {await self.token()}"
         return headers
  
-    # ------------------------------------------------------------------ #
-    # Token
-    # ------------------------------------------------------------------ #
  
     @classmethod
     def invalidate(cls) -> None:
@@ -72,9 +66,9 @@ class ServiceNowAuth:
         data = {
             "grant_type": "password",
             "client_id": settings.SNOW_CLIENT_ID,
-            "client_secret": settings.SNOW_CLIENT_SECRET,
+            "client_secret": settings.SNOW_CLIENT_SECRET.get_secret_value(),
             "username": settings.SNOW_USER,
-            "password": settings.SNOW_PASSWORD,
+            "password": settings.SNOW_PASSWORD.get_secret_value(),
         }
         try:
             response = await self.http_client.post(

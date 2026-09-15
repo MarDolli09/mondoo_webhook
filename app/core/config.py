@@ -1,17 +1,20 @@
 from typing import Dict, List, Tuple
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
+UNRESOLVED_KEYVAULT_MARKER = "@Microsoft.KeyVault"
+ 
+ 
 class Settings(BaseSettings):
-
-    MONDOO_API_KEY: str 
-    WEBHOOK_SECRET_KEY: str 
+ 
+    MONDOO_API_KEY: SecretStr
+    WEBHOOK_SECRET_KEY: SecretStr
+    SNOW_PASSWORD: SecretStr
+    SNOW_CLIENT_SECRET: SecretStr = SecretStr("")
     SNOW_INSTANCE_URL: str
     SNOW_AUTH_MODE: str
     SNOW_USER: str
-    SNOW_PASSWORD: str
-    SNOW_CLIENT_ID: str
-    SNOW_CLIENT_SECRET: str
+    SNOW_CLIENT_ID: str = ""
     SNOW_CATALOG_ITEM_SYS_ID: str
     SNOW_REQUESTED_FOR_SYS_ID: str
     MONDOO_GRAPHQL_MAX_PAGES: int = 50
@@ -80,5 +83,62 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
+    @field_validator(
+        "MONDOO_API_KEY", "WEBHOOK_SECRET_KEY", "SNOW_PASSWORD", "SNOW_CLIENT_SECRET"
+    )
+    @classmethod
+    def _reject_unresolved_keyvault(cls, value: SecretStr, info) -> SecretStr:
+        if value.get_secret_value().startswith(UNRESOLVED_KEYVAULT_MARKER):
+            raise ValueError(
+                f"{info.field_name} enthaelt eine nicht aufgeloeste "
+                f"Key-Vault-Referenz. Pruefen: Managed Identity der App Service "
+                f"aktiviert, Rolle 'Key Vault Secrets User' vergeben, "
+                f"Secret-Name korrekt."
+            )
+        return value
+ 
+    @model_validator(mode="after")
+    def _check_required_secrets(self) -> "Settings":
+        missing = [
+            name
+            for name in ("MONDOO_API_KEY", "WEBHOOK_SECRET_KEY", "SNOW_PASSWORD")
+            if not getattr(self, name).get_secret_value()
+        ]
+        if missing:
+            raise ValueError(f"Pflicht-Geheimwerte sind leer: {', '.join(missing)}")
+ 
+        if self.SNOW_AUTH_MODE.lower() == "oauth":
+            oauth_missing = [
+                name
+                for name, value in (
+                    ("SNOW_CLIENT_ID", self.SNOW_CLIENT_ID),
+                    ("SNOW_CLIENT_SECRET", self.SNOW_CLIENT_SECRET.get_secret_value()),
+                )
+                if not value
+            ]
+            if oauth_missing:
+                raise ValueError(
+                    f"SNOW_AUTH_MODE=oauth erfordert: {', '.join(oauth_missing)}"
+                )
+        return self
+ 
 
+    def secret_values(self) -> List[str]:
+        """Alle Geheimwerte im Klartext, fuer den Log-Formatter.
+ 
+        Bewusst die einzige Stelle, die alle vier zusammen herausgibt - wer
+        hier etwas ergaenzt, sorgt automatisch dafuer, dass es maskiert wird.
+        """
+        return [
+            value
+            for value in (
+                self.MONDOO_API_KEY.get_secret_value(),
+                self.WEBHOOK_SECRET_KEY.get_secret_value(),
+                self.SNOW_PASSWORD.get_secret_value(),
+                self.SNOW_CLIENT_SECRET.get_secret_value(),
+            )
+            if value
+        ]
+ 
+ 
 settings = Settings()

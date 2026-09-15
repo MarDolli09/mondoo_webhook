@@ -7,7 +7,7 @@ from app.api.webhook import router as webhook_router
 from app.core.config import settings
 from app.core.exceptions import MondooBaseException
 from app.core.lifespan import lifespan
-from app.core.logging import logger, mask_secret
+from app.core.logging import logger, mask_secrets
 
 app = FastAPI(
     title="Mondoo Webhook Receiver",
@@ -31,7 +31,7 @@ async def correlation_id_middleware(request: Request, call_next):
 
 @app.exception_handler(MondooBaseException)
 async def custom_exception_handler(request: Request, exc: MondooBaseException):
-    safe_path = mask_secret(request.url.path, settings.WEBHOOK_SECRET_KEY)
+    safe_path = mask_secrets(request.url.path, settings.secret_values())
     logger.warning(
         f"Handled Exception [{exc.status_code}] auf {safe_path}: {exc.message}"
     )
@@ -45,7 +45,7 @@ async def custom_exception_handler(request: Request, exc: MondooBaseException):
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    safe_path = mask_secret(request.url.path, settings.WEBHOOK_SECRET_KEY)
+    safe_path = mask_secrets(request.url.path, settings.secret_values())
     logger.error(
         f"UNERWARTETER SERVERFEHLER auf {safe_path}: {str(exc)}",
         exc_info=True,
