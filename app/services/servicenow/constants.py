@@ -15,8 +15,8 @@ TERMINAL_STATES = (
 # ---------------------------------------------------------------------- #
 # Benutzer & Beobachter
 # ---------------------------------------------------------------------- #
-OPENED_BY_USER = "User_Mondoo_API"
-OPENED_BY_SYSTEM = "System_Mondoo_API"
+OPENED_BY_USER = "mosca.rest"
+OPENED_BY_SYSTEM = "mosca.rest"
 FIXED_WATCHERS = ("Lars Siefert", "Alexander Haller")
 
 # ---------------------------------------------------------------------- #

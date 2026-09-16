@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from app.core.config import settings
 from app.core.logging import logger
 from app.models.schemas import CLOSING_EVENTS, ServiceNowPayload
 
@@ -53,7 +54,11 @@ class ServiceNowClient:
     # ------------------------------------------------------------------ #
 
     async def _create(self, payload: ServiceNowPayload) -> Dict[str, Any]:
-        request_sys_id = await self.api.order_catalog_item(mapping.build_variables(payload))
+        requested_for = settings.SNOW_REQUESTED_FOR_SYS_ID or await self.api.resolve_user_sys_id(OPENED_BY_USER)
+        request_sys_id = await self.api.order_catalog_item(
+            mapping.build_variables(payload),
+            requested_for_sys_id=requested_for,
+        )
         ritm = await self.api.resolve_request_item(request_sys_id)
         ritm_sys_id = ritm["sys_id"]
 

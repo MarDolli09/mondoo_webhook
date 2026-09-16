@@ -1,5 +1,5 @@
 from typing import Dict, List, Tuple
-from pydantic import SecretStr, field_validator, model_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 UNRESOLVED_KEYVAULT_MARKER = "@Microsoft.KeyVault"
@@ -7,16 +7,28 @@ UNRESOLVED_KEYVAULT_MARKER = "@Microsoft.KeyVault"
  
 class Settings(BaseSettings):
  
-    MONDOO_API_KEY: SecretStr
-    WEBHOOK_SECRET_KEY: SecretStr
-    SNOW_PASSWORD: SecretStr
-    SNOW_CLIENT_SECRET: SecretStr = SecretStr("")
+    MONDOO_API_KEY: SecretStr = Field(
+        validation_alias=AliasChoices("MONDOO_API_KEY", "MONDOO-API-KEY")
+    )
+    WEBHOOK_SECRET_KEY: SecretStr = Field(
+        validation_alias=AliasChoices("WEBHOOK_SECRET_KEY", "WEBHOOK-SECRET-KEY")
+    )
+    SNOW_PASSWORD: SecretStr = Field(
+        validation_alias=AliasChoices("SNOW_PASSWORD", "SNOW-PASSWORD")
+    )
+    SNOW_CLIENT_SECRET: SecretStr = Field(
+        default=SecretStr(""),
+        validation_alias=AliasChoices("SNOW_CLIENT_SECRET", "SNOW-CLIENT-SECRET"),
+    )
     SNOW_INSTANCE_URL: str
     SNOW_AUTH_MODE: str
     SNOW_USER: str
-    SNOW_CLIENT_ID: str = ""
+    SNOW_CLIENT_ID: str = Field(
+        default="",
+        validation_alias=AliasChoices("SNOW_CLIENT_ID", "SNOW-CLIENT-ID"),
+    )
     SNOW_CATALOG_ITEM_SYS_ID: str
-    SNOW_REQUESTED_FOR_SYS_ID: str
+    SNOW_REQUESTED_FOR_SYS_ID: str = ""
     MONDOO_GRAPHQL_MAX_PAGES: int = 50
     HTTP_TIMEOUT_SECONDS: float = 10.0
     CVSS_SEARCH_BUDGET_SECONDS: float = 20.0
@@ -81,7 +93,9 @@ class Settings(BaseSettings):
     DEFAULT_URGENCY_IMPACT: Tuple[str, str] = ("3", "3")
     DEFAULT_TICKET_TYPE: str = " / "
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore", case_sensitive=False
+    )
 
     @field_validator(
         "MONDOO_API_KEY", "WEBHOOK_SECRET_KEY", "SNOW_PASSWORD", "SNOW_CLIENT_SECRET"

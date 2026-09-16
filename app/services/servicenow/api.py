@@ -174,11 +174,14 @@ class ServiceNowAPI:
     # Service Catalog
     # ------------------------------------------------------------------ #
  
-    async def order_catalog_item(self, variables: Dict[str, str]) -> str:
+    async def order_catalog_item(
+        self, variables: Dict[str, str], requested_for_sys_id: Optional[str] = None
+    ) -> str:
         """Bestellt das Katalogformular und gibt die sys_id des REQ zurueck."""
         body: Dict[str, Any] = {"sysparm_quantity": "1", "variables": variables}
-        if settings.SNOW_REQUESTED_FOR_SYS_ID:
-            body["sysparm_requested_for"] = settings.SNOW_REQUESTED_FOR_SYS_ID
+        target_requested_for = requested_for_sys_id or settings.SNOW_REQUESTED_FOR_SYS_ID
+        if target_requested_for:
+            body["sysparm_requested_for"] = target_requested_for
  
         response = await self.request(
             "POST",
