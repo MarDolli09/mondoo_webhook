@@ -1,5 +1,6 @@
 import asyncio
 import re
+import urllib.parse
 from abc import ABC
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -248,7 +249,12 @@ class BaseTicketParser(ABC):
     async def parse(self, raw_payload: Dict[str, Any]) -> Tuple[ServiceNowPayload, Optional[int]]:
         data = raw_payload.get("body", raw_payload) if isinstance(raw_payload.get("body"), dict) else raw_payload
         case_raw = data.get("case", {})
-        description = data.get("content", {}).get("description", "")
+        description = (
+            data.get("content", {}).get("description", "")
+            or case_raw.get("content", {}).get("description", "")
+            or case_raw.get("description", "")
+            or ""
+        )
         title = case_raw.get("title", "")
         owner_mrn = case_raw.get("ownerMrn", "")
         space_id = text_cleaner.extract_space_id(owner_mrn)
@@ -296,7 +302,12 @@ class BaseTicketParser(ABC):
                 f"Ticket ohne Benutzer-MRN in createdBy ('{created_by}'). "
                 f"Moeglicherweise automatisch erzeugtes Regressions-Ticket."
             )
- 
+
+        ticket_url = text_cleaner.extract_ticket_url(description)
+        if not ticket_url and space_id and case_raw.get("mrn"):
+            quoted_mrn = urllib.parse.quote(case_raw["mrn"], safe="")
+            ticket_url = f"https://app.mondoo.com/space/tickets/{quoted_mrn}?region=EU&spaceId={space_id}"
+
         cleaned_payload = ServiceNowPayload(
             case=ServiceNowCase(
                 ticketState=raw_event_type,
@@ -315,7 +326,7 @@ class BaseTicketParser(ABC):
                 urgency=urgency,
                 impact=impact,
                 title=title,
-                ticket_url=text_cleaner.extract_ticket_url(description),
+                ticket_url=ticket_url,
                 createdAt=case_raw.get("createdAt", ""),
                 updatedAt=case_raw.get("updatedAt", ""),
                 assetsCount=case_raw.get("assetsCount", 0),

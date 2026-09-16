@@ -166,6 +166,7 @@ def build_task_fields(
 
     body: Dict[str, Any] = {
         "work_notes": build_work_notes(payload, is_initial=is_initial),
+        "short_description": truncate(case.title, SHORT_DESCRIPTION_MAX),
     }
 
     if is_initial or case.prioritySource != "default":
@@ -190,8 +191,6 @@ def build_task_fields(
         if watcher_sys_ids:
             # GlideList erwartet kommagetrennte Sys-IDs
             body["watch_list"] = ",".join(watcher_sys_ids)
-    else:
-        body["short_description"] = truncate(case.title, SHORT_DESCRIPTION_MAX)
 
     body.update(_closing_fields(case.eventType))
     return body
