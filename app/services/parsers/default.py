@@ -10,9 +10,8 @@ class DefaultParser(BaseTicketParser):
     def __init__(self, mondoo_client: Optional[MondooGraphQLClient] = None):
         super().__init__(mondoo_client=mondoo_client)
 
-    async def _resolve_assets(self, case_raw: Dict[str, Any], title: str, description: str) -> List[AssetRemediation]:
+    async def _resolve_assets(self, case_raw: Dict[str, Any], title: str, description: str, *, resolve_names: bool = True) -> List[AssetRemediation]:
         return []
 
     async def _resolve_cvss_details(self, case_raw: Dict[str, Any], owner_mrn: str, space_id: str) -> Tuple[str, str, Optional[int]]:
-        # Unklassifizierbare Befunde erhalten ohnehin keine Asset-Zuordnung (siehe _resolve_assets);
         return "", "", None

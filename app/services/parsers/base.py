@@ -146,7 +146,12 @@ class BaseTicketParser(ABC):
         return resolved
 
     async def _resolve_assets(
-        self, case_raw: Dict[str, Any], title: str, description: str
+        self,
+        case_raw: Dict[str, Any],
+        title: str,
+        description: str,
+        *,
+        resolve_names: bool = True,
     ) -> List[AssetRemediation]:
 
         text_index = text_cleaner.build_asset_index(description)
@@ -192,7 +197,7 @@ class BaseTicketParser(ABC):
         # Schritt 2: Namen nur fuer die Assets nachladen, die der Befundtext
         # nicht hergibt
         name_map: Dict[str, str] = {}
-        if not single_name_from_title:
+        if resolve_names and not single_name_from_title:
             missing = [t for t in targets if t[1] not in text_index]
             name_map = await self._fetch_asset_names(missing)
 
