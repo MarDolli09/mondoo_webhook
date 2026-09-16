@@ -24,17 +24,44 @@ from .constants import (
     TABLE_USER,
     TABLE_USER_GROUP,
 )
- 
- 
+
+
+class ReferenceCache:
+    """Task-sicherer In-Memory-Cache fuer aufgeloeste ServiceNow-Referenzen (sys_id)."""
+
+    def __init__(self) -> None:
+        self._cache: Dict[Tuple[str, str, str], str] = {}
+        self._lock = asyncio.Lock()
+
+    def get(self, key: Tuple[str, str, str]) -> Optional[str]:
+        return self._cache.get(key)
+
+    def set(self, key: Tuple[str, str, str], value: str) -> None:
+        self._cache[key] = value
+
+    def clear(self) -> None:
+        self._cache.clear()
+
+    @property
+    def lock(self) -> asyncio.Lock:
+        return self._lock
+
+
+_global_reference_cache = ReferenceCache()
+
+
 class ServiceNowAPI:
-    _reference_cache: Dict[Tuple[str, str, str], str] = {}
-    _reference_lock = asyncio.Lock()
- 
-    def __init__(self, http_client: httpx.AsyncClient, base_url: Optional[str] = None):
+    def __init__(
+        self,
+        http_client: httpx.AsyncClient,
+        base_url: Optional[str] = None,
+        reference_cache: Optional[ReferenceCache] = None,
+    ):
         self.http_client = http_client
         self.base_url = (base_url or settings.SNOW_INSTANCE_URL).rstrip("/")
         self.auth = ServiceNowAuth(self.http_client, self.base_url)
- 
+        self.cache = reference_cache or _global_reference_cache
+
     # ------------------------------------------------------------------ #
     # Transport
     # ------------------------------------------------------------------ #
@@ -214,15 +241,15 @@ class ServiceNowAPI:
     async def _resolve_reference(
         self, table: str, *, query: str, value: str, label: str
     ) -> Optional[str]:
-
-        cls = ServiceNowAPI
         cache_key = (table, query, value)
-        if cache_key in cls._reference_cache:
-            return cls._reference_cache[cache_key]
+        cached = self.cache.get(cache_key)
+        if cached:
+            return cached
 
-        async with cls._reference_lock:
-            if cache_key in cls._reference_cache:
-                return cls._reference_cache[cache_key]
+        async with self.cache.lock:
+            cached = self.cache.get(cache_key)
+            if cached:
+                return cached
 
             try:
                 records = await self._query_table(
@@ -249,7 +276,7 @@ class ServiceNowAPI:
                 return None
 
             sys_id = records[0]["sys_id"]
-            cls._reference_cache[cache_key] = sys_id
+            self.cache.set(cache_key, sys_id)
             logger.info(f"{label} '{value}' aufgeloest und zwischengespeichert.")
             return sys_id
 

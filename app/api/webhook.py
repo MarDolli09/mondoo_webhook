@@ -2,7 +2,7 @@ import json
 import secrets
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from zoneinfo import ZoneInfo
  
 import httpx
@@ -22,8 +22,6 @@ from app.services.ticket_parser import TicketParserService
 router = APIRouter(prefix="/webhook/mondoo", tags=["Webhook"])
  
 _SENSITIVE_HEADERS = {"authorization", "cookie", "proxy-authorization", "x-api-key"}
- 
-_headers_logged = False
  
  
 def get_http_client(request: Request) -> httpx.AsyncClient:
@@ -53,20 +51,26 @@ def verify_secret_key(secret_key: str) -> None:
         raise InvalidSecretKeyError()
  
  
-def _log_headers_once(request: Request) -> None:
-    global _headers_logged
-    if _headers_logged:
-        return
-    _headers_logged = True
-    safe = {
-        key: value
-        for key, value in request.headers.items()
-        if key.lower() not in _SENSITIVE_HEADERS
-    }
-    logger.info(json.dumps({"event": "inbound_headers_sample", "headers": safe}))
- 
- 
-def _compute_latency(mondoo_created_at: Any, received_at: datetime):
+class InboundHeaderLogger:
+    def __init__(self) -> None:
+        self._logged = False
+
+    def log_sample_once(self, request: Request) -> None:
+        if self._logged:
+            return
+        self._logged = True
+        safe = {
+            key: value
+            for key, value in request.headers.items()
+            if key.lower() not in _SENSITIVE_HEADERS
+        }
+        logger.info(json.dumps({"event": "inbound_headers_sample", "headers": safe}))
+
+
+_header_logger = InboundHeaderLogger()
+
+
+def _compute_latency(mondoo_created_at: Any, received_at: datetime) -> Optional[float]:
     if not mondoo_created_at or not isinstance(mondoo_created_at, str):
         return None
     try:
@@ -74,8 +78,52 @@ def _compute_latency(mondoo_created_at: Any, received_at: datetime):
         return round((received_at - created).total_seconds(), 2)
     except (ValueError, TypeError):
         return None
- 
- 
+
+
+def _build_telemetry_record(
+    detected_type: str,
+    parsed_payload: Any,
+    snow_record: Dict[str, Any],
+    cvss_found_on_page: Optional[int],
+    parse_ms: float,
+    snow_ms: float,
+    mondoo_created_at: Any,
+    received_at: datetime,
+) -> Dict[str, Any]:
+    case = parsed_payload.case
+    return {
+        "event": "mondoo_to_servicenow_processed",
+        "ticket_type": detected_type,
+        "mondoo_event": case.ticketState,
+        "mapped_event": case.eventType.value,
+        "case_status": case.caseStatus or None,
+        "creator": case.createdBy or None,
+        "snow_action": snow_record.get("action"),
+        "servicenow_ritm": snow_record.get("number"),
+        "servicenow_sys_id": snow_record.get("sys_id"),
+        "attachment_stored": snow_record.get("attachment"),
+        "priority_source": case.prioritySource,
+        "urgency": case.urgency,
+        "impact": case.impact,
+        "cvss_score": case.cvssScore or None,
+        "cvss_rating": case.cvssRiskRating or None,
+        "risk_rating": case.riskRating or None,
+        "risk_score": case.riskScore or None,
+        "cvss_found_on_page": cvss_found_on_page,
+        "assets_reported": case.assetsCount,
+        "assets_resolved": len(case.remediations.table),
+        "is_automated": case.isAutomated,
+        "parse_duration_ms": parse_ms,
+        "servicenow_duration_ms": snow_ms,
+        "mondoo_created_at": mondoo_created_at,
+        "webhook_received_at_utc": received_at.isoformat(),
+        "webhook_received_at_local": received_at.astimezone(
+            ZoneInfo("Europe/Berlin")
+        ).isoformat(),
+        "latency_seconds": _compute_latency(mondoo_created_at, received_at),
+    }
+
+
 @router.post("/{secret_key}", status_code=status.HTTP_200_OK)
 async def receive_mondoo_webhook(
     secret_key: str,
@@ -85,77 +133,48 @@ async def receive_mondoo_webhook(
     snow_client: ServiceNowClient = Depends(get_servicenow_client),
 ) -> Dict[str, Any]:
     verify_secret_key(secret_key)
- 
+
     received_at = datetime.now(timezone.utc)
     started = time.perf_counter()
     logger.info("=== WEBHOOK EMPFANGEN ===")
-    _log_headers_once(request)
- 
+    _header_logger.log_sample_once(request)
+
     normalized = parser_service.normalize_payload(payload)
- 
     case_raw = normalized.get("case")
     if not isinstance(case_raw, dict) or not case_raw.get("mrn"):
         raise PayloadParsingError("case fehlt oder enthaelt keine mrn.")
- 
+
     mondoo_created_at = case_raw.get("createdAt")
- 
     detected_type = parser_service.classify_ticket_type(normalized)
     logger.info(
         f"Typ '{detected_type}' erkannt, Ereignis '{normalized.get('type', '-')}', "
         f"{case_raw.get('assetsCount', 0)} Assets. Starte Parsing..."
     )
- 
+
     # 1. Parsing, Bereinigung und optionale GraphQL-Anreicherung
     parsed_result, cvss_found_on_page = await parser_service.process_payload(
         normalized, detected_type
     )
     parse_ms = round((time.perf_counter() - started) * 1000, 2)
- 
+
     # 2. Uebergabe an ServiceNow (Lookup via correlation_id -> order_now oder Update)
     snow_started = time.perf_counter()
     snow_record = await snow_client.process_payload(parsed_result)
     snow_ms = round((time.perf_counter() - snow_started) * 1000, 2)
- 
-    case = parsed_result.case
- 
-    # 3. Telemetrie
-    logger.info(
-        json.dumps(
-            {
-                "event": "mondoo_to_servicenow_processed",
-                "ticket_type": detected_type,
-                "mondoo_event": case.ticketState,
-                "mapped_event": case.eventType.value,
-                "case_status": case.caseStatus or None,
-                "creator": case.createdBy or None,
-                "snow_action": snow_record.get("action"),
-                "servicenow_ritm": snow_record.get("number"),
-                "servicenow_sys_id": snow_record.get("sys_id"),
-                "attachment_stored": snow_record.get("attachment"),
-                "priority_source": case.prioritySource,
-                "urgency": case.urgency,
-                "impact": case.impact,
-                "cvss_score": case.cvssScore or None,
-                "cvss_rating": case.cvssRiskRating or None,
-                "risk_rating": case.riskRating or None,
-                "risk_score": case.riskScore or None,
-                "cvss_found_on_page": cvss_found_on_page,
-                "assets_reported": case.assetsCount,
-                "assets_resolved": len(case.remediations.table),
-                "is_automated": case.isAutomated,
-                "parse_duration_ms": parse_ms,
-                "servicenow_duration_ms": snow_ms,
-                "mondoo_created_at": mondoo_created_at,
-                "webhook_received_at_utc": received_at.isoformat(),
-                "webhook_received_at_local": received_at.astimezone(
-                    ZoneInfo("Europe/Berlin")
-                ).isoformat(),
-                "latency_seconds": _compute_latency(mondoo_created_at, received_at),
-            },
-            ensure_ascii=False,
-        )
+
+    # 3. Strukturierte Telemetrie loggen
+    telemetry = _build_telemetry_record(
+        detected_type=detected_type,
+        parsed_payload=parsed_result,
+        snow_record=snow_record,
+        cvss_found_on_page=cvss_found_on_page,
+        parse_ms=parse_ms,
+        snow_ms=snow_ms,
+        mondoo_created_at=mondoo_created_at,
+        received_at=received_at,
     )
- 
+    logger.info(json.dumps(telemetry, ensure_ascii=False))
+
     return {
         "status": "success",
         "action": snow_record.get("action"),
