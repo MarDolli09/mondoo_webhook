@@ -1,5 +1,5 @@
 from typing import Dict, List, Tuple
-from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 UNRESOLVED_KEYVAULT_MARKER = "@Microsoft.KeyVault"
@@ -7,26 +7,14 @@ UNRESOLVED_KEYVAULT_MARKER = "@Microsoft.KeyVault"
  
 class Settings(BaseSettings):
  
-    MONDOO_API_KEY: SecretStr = Field(
-        validation_alias=AliasChoices("MONDOO_API_KEY", "MONDOO-API-KEY")
-    )
-    WEBHOOK_SECRET_KEY: SecretStr = Field(
-        validation_alias=AliasChoices("WEBHOOK_SECRET_KEY", "WEBHOOK-SECRET-KEY")
-    )
-    SNOW_PASSWORD: SecretStr = Field(
-        validation_alias=AliasChoices("SNOW_PASSWORD", "SNOW-PASSWORD")
-    )
-    SNOW_CLIENT_SECRET: SecretStr = Field(
-        default=SecretStr(""),
-        validation_alias=AliasChoices("SNOW_CLIENT_SECRET", "SNOW-CLIENT-SECRET"),
-    )
+    MONDOO_API_KEY: SecretStr
+    WEBHOOK_SECRET_KEY: SecretStr
+    SNOW_PASSWORD: SecretStr
+    SNOW_CLIENT_SECRET: SecretStr = SecretStr("")
     SNOW_INSTANCE_URL: str
     SNOW_AUTH_MODE: str
     SNOW_USER: str
-    SNOW_CLIENT_ID: str = Field(
-        default="",
-        validation_alias=AliasChoices("SNOW_CLIENT_ID", "SNOW-CLIENT-ID"),
-    )
+    SNOW_CLIENT_ID: str = ""
     SNOW_CATALOG_ITEM_SYS_ID: str
     SNOW_REQUESTED_FOR_SYS_ID: str = ""
     MONDOO_GRAPHQL_MAX_PAGES: int = 50
