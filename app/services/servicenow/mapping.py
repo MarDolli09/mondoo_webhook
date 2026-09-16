@@ -63,8 +63,10 @@ def watcher_names(payload: ServiceNowPayload) -> List[str]:
     # Wenn menschlicher Ersteller vorhanden: Namen über USER_MAP auflösen
     if not case.isAutomated and case.createdBy:
         creator_name = settings.USER_MAP.get(case.createdBy.strip())
-        if creator_name and creator_name not in watchers:
-            watchers.append(creator_name)
+        if creator_name:
+            normalized_watchers = {w.strip().lower() for w in watchers}
+            if creator_name.strip().lower() not in normalized_watchers:
+                watchers.append(creator_name.strip())
 
     return watchers
 

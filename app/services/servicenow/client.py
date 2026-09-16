@@ -116,9 +116,9 @@ class ServiceNowClient:
             target_watchers = mapping.watcher_names(payload)
             for name in target_watchers:
                 w_id = await self.api.resolve_user_sys_id(name)
-                if w_id:
+                if w_id and w_id not in watcher_sys_ids:
                     watcher_sys_ids.append(w_id)
-                else:
+                elif not w_id:
                     logger.warning(
                         f"Beobachter '{name}' konnte in ServiceNow nicht aufgelöst werden."
                     )
