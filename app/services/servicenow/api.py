@@ -129,7 +129,14 @@ class ServiceNowAPI:
             TABLE_REQUEST_ITEM,
             query=f"correlation_id={correlation_id}^ORDERBYDESCsys_created_on",
             fields="sys_id,number,state,stage,request",
+            limit=2,
         )
+        if len(records) > 1:
+            numbers = [r.get("number", "ohne Nummer") for r in records]
+            logger.warning(
+                f"Mehrere RITMs ({', '.join(numbers)}) zu correlation_id '{correlation_id}' "
+                f"gefunden! Mögliches Duplikat. Verwende das neueste Ticket ({records[0].get('number')})."
+            )
         return records[0] if records else None
  
     async def resolve_request_item(self, request_sys_id: str) -> Dict[str, Any]:

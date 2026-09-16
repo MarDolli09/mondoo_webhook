@@ -93,6 +93,7 @@ def build_variables(payload: ServiceNowPayload) -> Dict[str, str]:
     ]
 
     return {
+        "mondoo_mrn": correlation_id(payload),
         "mondoo_title": truncate(case.title, SHORT_DESCRIPTION_MAX),
         "mondoo_cve": case.findingCVE or "",
         "cvss_score": case.cvssScore or "",
@@ -102,7 +103,7 @@ def build_variables(payload: ServiceNowPayload) -> Dict[str, str]:
         "mondoo_space": case.mondooSpace or "",
         "finding_type": case.ticketType or "",
         "ticket_url": sanitize_url(case.ticket_url),
-        "assets_count": str(case.assetsCount),
+        "assets_count": str(case.assetsCount or len(case.remediations.table)),
         "mondoo_created_by": resolve_creator_name(case),
         "mondoo_assets": json.dumps(mrvs_rows, ensure_ascii=False),
     }
@@ -166,7 +167,6 @@ def build_task_fields(
 
     body: Dict[str, Any] = {
         "work_notes": build_work_notes(payload, is_initial=is_initial),
-        "short_description": truncate(case.title, SHORT_DESCRIPTION_MAX),
     }
 
     if is_initial or case.prioritySource != "default":
@@ -184,6 +184,7 @@ def build_task_fields(
     if is_initial:
         body["state"] = STATE_OPEN
         body["correlation_id"] = correlation_id(payload)
+        body["short_description"] = truncate(case.title, SHORT_DESCRIPTION_MAX)
         
         if opened_by_sys_id:
             body["opened_by"] = opened_by_sys_id
