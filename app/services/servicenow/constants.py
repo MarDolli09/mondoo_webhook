@@ -17,7 +17,7 @@ TERMINAL_STATES = (
 # ---------------------------------------------------------------------- #
 OPENED_BY_USER = "mosca.rest"
 OPENED_BY_SYSTEM = "mosca.rest"
-FIXED_WATCHERS = ("Lars Siefert", "Alexander Haller")
+FIXED_WATCHERS = "lars.siefert@mosca.com"
 
 # ---------------------------------------------------------------------- #
 # Feldgrenzen der task-Tabelle

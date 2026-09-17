@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     USER_MAP: Dict[str, str] = {
         "//captain.api.mondoo.app/users/3CnXrWtrHy64L3xt2SCzgJKX0OM": "Marius Dollinger",
         "//captain.api.mondoo.app/users/2nFSVWcDIyqJLXA0A2xvpfU6pXg": "Lars Siefert",
+        "//captain.api.mondoo.app/users/2nZF38ZPg7vhizUrgIHqRF1aUwu": "Alexander Haller"
     }
 
     ASSIGNMENTGROUP_MAP: Dict[str, str] = {
@@ -126,11 +127,6 @@ class Settings(BaseSettings):
  
 
     def secret_values(self) -> List[str]:
-        """Alle Geheimwerte im Klartext, fuer den Log-Formatter.
- 
-        Bewusst die einzige Stelle, die alle vier zusammen herausgibt - wer
-        hier etwas ergaenzt, sorgt automatisch dafuer, dass es maskiert wird.
-        """
         return [
             value
             for value in (
