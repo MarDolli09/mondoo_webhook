@@ -1,13 +1,13 @@
 """Webhook-Endpunkt: nimmt Mondoo-Ereignisse an und synchronisiert ServiceNow."""
 
 import json
-import secrets
 import time
 from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request, status
 
+from app.api.authentication import AuthenticatedDelivery, authenticate_delivery
 from app.api.dependencies import (
     AppResources,
     get_case_parser,
@@ -15,8 +15,7 @@ from app.api.dependencies import (
     get_ticket_synchronizer,
 )
 from app.api.telemetry import build_telemetry_record
-from app.core.config import settings
-from app.core.exceptions import ConfigurationError, InvalidSecretKeyError
+from app.core.exceptions import PayloadParsingError
 from app.core.logging import current_correlation_id, logger
 from app.domain.ports import TicketSynchronizer
 from app.models.mondoo import MondooWebhookEvent
@@ -27,24 +26,24 @@ __all__ = ["router"]
 router = APIRouter(prefix="/webhook/mondoo", tags=["Webhook"])
 
 
-@router.post("/{secret_key}", status_code=status.HTTP_200_OK)
+@router.post("", status_code=status.HTTP_200_OK)
 async def receive_mondoo_webhook(
-    secret_key: str,
-    payload: dict[str, Any],
     request: Request,
+    delivery: AuthenticatedDelivery = Depends(authenticate_delivery),
     resources: AppResources = Depends(get_resources),
     case_parser: CaseParser = Depends(get_case_parser),
     ticket_synchronizer: TicketSynchronizer = Depends(get_ticket_synchronizer),
 ) -> dict[str, Any]:
-    """Verarbeitet ein Mondoo-Ereignis: pruefen, normalisieren, synchronisieren."""
-    _verify_secret_key(secret_key)
+    """Verarbeitet eine authentifizierte Mondoo-Zustellung.
 
+    Ablauf: normalisieren, mit CVSS anreichern, mit ServiceNow synchronisieren.
+    """
     received_at = datetime.now(timezone.utc)
     started = time.perf_counter()
-    logger.info("=== WEBHOOK EMPFANGEN ===")
+    logger.info(f"=== WEBHOOK EMPFANGEN (webhook-id {delivery.webhook_id}) ===")
     resources.header_sampler.log_once(request)
 
-    event = MondooWebhookEvent.from_payload(payload)
+    event = MondooWebhookEvent.from_payload(_decode_json_object(delivery.body))
     finding_type = case_parser.classify_finding_type(event)
     logger.info(
         f"Typ '{finding_type}' erkannt, Ereignis '{event.raw_type or '-'}', "
@@ -70,6 +69,7 @@ async def receive_mondoo_webhook(
         servicenow_ms=servicenow_ms,
         received_at=received_at,
         correlation_id=current_correlation_id(),
+        webhook_id=delivery.webhook_id,
     )
     logger.info(json.dumps(telemetry, ensure_ascii=False))
 
@@ -82,13 +82,14 @@ async def receive_mondoo_webhook(
     }
 
 
-def _verify_secret_key(secret_key: str) -> None:
-    expected = settings.WEBHOOK_SECRET_KEY.get_secret_value()
-    if not expected:
-        raise ConfigurationError("WEBHOOK_SECRET_KEY ist nicht gesetzt.")
-
-    if not secrets.compare_digest(secret_key, expected):
-        raise InvalidSecretKeyError()
+def _decode_json_object(body: bytes) -> dict[str, Any]:
+    try:
+        payload = json.loads(body)
+    except ValueError as exc:
+        raise PayloadParsingError("Body ist kein gueltiges JSON.") from exc
+    if not isinstance(payload, dict):
+        raise PayloadParsingError("Body ist kein JSON-Objekt.")
+    return payload
 
 
 def _elapsed_ms(started: float) -> float:

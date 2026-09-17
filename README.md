@@ -6,7 +6,11 @@ ServiceNow Service Catalog an oder pflegt bestehende.
 
 ## Ablauf
 
-1. `POST /webhook/mondoo/{secret_key}` prüft den Schlüssel (404 bei Abweichung).
+1. `POST /webhook/mondoo` prüft vor jeder Verarbeitung den Auth-Header und die
+   Signatur nach [Standard Webhooks](https://github.com/standard-webhooks/standard-webhooks)
+   (`webhook-id`, `webhook-timestamp`, `webhook-signature`, HMAC-SHA256,
+   höchstens 5 Minuten Zeitabweichung). Jeder Fehler ergibt 401 ohne Begründung;
+   der Grund steht im Log.
 2. `MondooWebhookEvent` liest den Payload (mit oder ohne `body`-Hülle).
 3. `CaseParser` bestimmt den Finding-Typ, sucht CVSS-Details (nur
    Vulnerabilities und Advisories) und priorisiert:
@@ -61,6 +65,16 @@ Importregeln (durch `tests/test_architecture.py` geprüft):
 * Teilsysteme (`app.api`, `app.services.*`) werden von außen nur über ihre
   `__init__.py` importiert.
 * `app.domain` und `app.models` sind ohne Umgebungsvariablen importierbar.
+
+## Betrieb in Azure
+
+* Startbefehl: `gunicorn app.main:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --timeout 600`
+* App Setting `SCM_DO_BUILD_DURING_DEPLOYMENT=true`, deployt wird der Inhalt des
+  Repository-Stamms (`app/`, `main.py`, `requirements.txt` direkt unter `wwwroot`).
+* `MONDOO_WEBHOOK_SIGNING_SECRET` und `MONDOO_WEBHOOK_AUTH_HEADER_VALUE` als
+  Key-Vault-Referenzen; die Werte müssen exakt denen der Mondoo-Integration entsprechen.
+* Mondoo-Integration: URL `https://<host>/webhook/mondoo` (ohne abschließenden `/`),
+  „Sign deliveries“ und „Send an authentication header“ aktiv.
 
 ## Konfiguration
 

@@ -5,8 +5,16 @@ Fachliche Stammdaten stehen in ``app.core.master_data``.
 
 import os
 
-from pydantic import SecretStr, ValidationInfo, field_validator, model_validator
+from pydantic import (
+    PositiveInt,
+    SecretStr,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.core.webhook_signature import decode_signing_secret
 
 __all__ = ["SETTINGS_CONFIG", "Settings", "settings"]
 
@@ -29,7 +37,11 @@ class Settings(BaseSettings):
     """Infrastruktur-Einstellungen des Webhooks."""
 
     MONDOO_API_KEY: SecretStr
-    WEBHOOK_SECRET_KEY: SecretStr
+    # Authentifizierung der Mondoo-Zustellungen (Standard Webhooks + Header)
+    MONDOO_WEBHOOK_SIGNING_SECRET: SecretStr
+    MONDOO_WEBHOOK_AUTH_HEADER_VALUE: SecretStr
+    MONDOO_WEBHOOK_AUTH_HEADER: str = "Authorization"
+    MONDOO_WEBHOOK_TOLERANCE_SECONDS: PositiveInt = 300
     SNOW_PASSWORD: SecretStr
     SNOW_CLIENT_SECRET: SecretStr = SecretStr("")
     SNOW_INSTANCE_URL: str
@@ -58,7 +70,11 @@ class Settings(BaseSettings):
         return self.SNOW_INSTANCE_URL.rstrip("/")
 
     @field_validator(
-        "MONDOO_API_KEY", "WEBHOOK_SECRET_KEY", "SNOW_PASSWORD", "SNOW_CLIENT_SECRET"
+        "MONDOO_API_KEY",
+        "MONDOO_WEBHOOK_SIGNING_SECRET",
+        "MONDOO_WEBHOOK_AUTH_HEADER_VALUE",
+        "SNOW_PASSWORD",
+        "SNOW_CLIENT_SECRET",
     )
     @classmethod
     def _reject_unresolved_keyvault(
@@ -73,15 +89,27 @@ class Settings(BaseSettings):
             )
         return value
 
+    @field_validator("MONDOO_WEBHOOK_SIGNING_SECRET")
+    @classmethod
+    def _require_standard_webhooks_secret(cls, value: SecretStr) -> SecretStr:
+        decode_signing_secret(value.get_secret_value())
+        return value
+
     @model_validator(mode="after")
     def _check_required_secrets(self) -> "Settings":
         missing = [
             name
-            for name in ("MONDOO_API_KEY", "WEBHOOK_SECRET_KEY", "SNOW_PASSWORD")
+            for name in (
+                "MONDOO_API_KEY",
+                "MONDOO_WEBHOOK_AUTH_HEADER_VALUE",
+                "SNOW_PASSWORD",
+            )
             if not getattr(self, name).get_secret_value()
         ]
         if missing:
             raise ValueError(f"Pflicht-Geheimwerte sind leer: {', '.join(missing)}")
+        if not self.MONDOO_WEBHOOK_AUTH_HEADER.strip():
+            raise ValueError("MONDOO_WEBHOOK_AUTH_HEADER darf nicht leer sein.")
 
         if self.uses_oauth:
             oauth_missing = [
@@ -104,7 +132,8 @@ class Settings(BaseSettings):
             value
             for value in (
                 self.MONDOO_API_KEY.get_secret_value(),
-                self.WEBHOOK_SECRET_KEY.get_secret_value(),
+                self.MONDOO_WEBHOOK_SIGNING_SECRET.get_secret_value(),
+                self.MONDOO_WEBHOOK_AUTH_HEADER_VALUE.get_secret_value(),
                 self.SNOW_PASSWORD.get_secret_value(),
                 self.SNOW_CLIENT_SECRET.get_secret_value(),
             )

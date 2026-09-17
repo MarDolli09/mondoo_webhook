@@ -10,6 +10,7 @@ from fastapi import Depends, FastAPI, Request
 from app.api.telemetry import InboundHeaderSampler
 from app.core.config import settings
 from app.core.logging import logger
+from app.core.webhook_signature import HEADER_SIGNATURE, StandardWebhookVerifier
 from app.domain.ports import TicketSynchronizer
 from app.services.mondoo import MondooGraphQLClient
 from app.services.parsing import CaseParser
@@ -39,6 +40,7 @@ class AppResources:
     servicenow_auth: ServiceNowAuth
     reference_cache: ReferenceCache
     header_sampler: InboundHeaderSampler
+    webhook_verifier: StandardWebhookVerifier
 
 
 @asynccontextmanager
@@ -52,7 +54,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             http_client=http_client,
             servicenow_auth=ServiceNowAuth(http_client, settings.snow_base_url),
             reference_cache=ReferenceCache(),
-            header_sampler=InboundHeaderSampler(),
+            header_sampler=InboundHeaderSampler(
+                extra_sensitive_headers=(
+                    settings.MONDOO_WEBHOOK_AUTH_HEADER,
+                    HEADER_SIGNATURE,
+                )
+            ),
+            webhook_verifier=StandardWebhookVerifier(
+                settings.MONDOO_WEBHOOK_SIGNING_SECRET.get_secret_value(),
+                settings.MONDOO_WEBHOOK_TOLERANCE_SECONDS,
+            ),
         )
         yield
     logger.info("Gemeinsamer HTTP-Client erfolgreich geschlossen.")

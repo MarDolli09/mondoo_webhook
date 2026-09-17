@@ -1,6 +1,7 @@
 """Telemetrie: strukturierter Verarbeitungsdatensatz und Header-Stichprobe."""
 
 import json
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
@@ -23,11 +24,15 @@ SENSITIVE_HEADERS = frozenset(
 class InboundHeaderSampler:
     """Protokolliert einmalig die Header eines eingehenden Requests.
 
-    Sensible Header werden ausgelassen. Eine Instanz lebt im Lifespan.
+    Sensible Header werden ausgelassen, darunter der konfigurierte Auth-Header.
+    Eine Instanz lebt im Lifespan.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, extra_sensitive_headers: Iterable[str] = ()) -> None:
         self._logged = False
+        self._sensitive = SENSITIVE_HEADERS | {
+            name.lower() for name in extra_sensitive_headers
+        }
 
     def log_once(self, request: Request) -> None:
         """Schreibt die Stichprobe beim ersten Aufruf, danach nichts mehr."""
@@ -37,7 +42,7 @@ class InboundHeaderSampler:
         safe = {
             key: value
             for key, value in request.headers.items()
-            if key.lower() not in SENSITIVE_HEADERS
+            if key.lower() not in self._sensitive
         }
         logger.info(json.dumps({"event": "inbound_headers_sample", "headers": safe}))
 
@@ -52,6 +57,7 @@ def build_telemetry_record(
     servicenow_ms: float,
     received_at: datetime,
     correlation_id: Optional[str],
+    webhook_id: str,
 ) -> dict[str, Any]:
     """Ein JSON-Datensatz je verarbeitetem Webhook fuer die Auswertung."""
     mondoo_created_at = event.case.created_at
@@ -83,6 +89,7 @@ def build_telemetry_record(
         "latency_seconds": _latency_seconds(mondoo_created_at, received_at),
         "case_mrn": case.mrn,
         "correlation_id": correlation_id,
+        "webhook_id": webhook_id,
     }
 
 

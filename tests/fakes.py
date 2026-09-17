@@ -1,20 +1,67 @@
 """Attrappen fuer Mondoo und ServiceNow sowie End-to-End-Aufrufe des Webhooks."""
 
 import json
+import os
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Optional, Union
 from unittest import mock
 from urllib.parse import parse_qsl
 
 import httpx
 
+from app.core.webhook_signature import decode_signing_secret, sign_delivery
 from tests import FIXTURES
 
-__all__ = ["FakeBackends", "RecordedRequest", "load_fixture", "post_webhooks"]
+__all__ = [
+    "Delivery",
+    "FakeBackends",
+    "RecordedRequest",
+    "load_fixture",
+    "post_webhooks",
+    "signed_delivery",
+]
 
 MONDOO_ENDPOINT = "https://eu.api.mondoo.com/query"
-SECRET = "dummy-webhook-secret-000"
+WEBHOOK_PATH = "/webhook/mondoo"
+SIGNING_SECRET = os.environ["MONDOO_WEBHOOK_SIGNING_SECRET"]
+AUTH_HEADER_VALUE = os.environ["MONDOO_WEBHOOK_AUTH_HEADER_VALUE"]
+
+
+@dataclass(frozen=True)
+class Delivery:
+    """Eine Zustellung, wie Mondoo sie sendet: roher Body und Header."""
+
+    body: bytes
+    headers: dict[str, str]
+
+
+def signed_delivery(
+    payload: Union[dict[str, Any], bytes],
+    *,
+    webhook_id: str = "msg_test_0001",
+    timestamp: Optional[int] = None,
+    secret: str = SIGNING_SECRET,
+    auth_header_value: Optional[str] = AUTH_HEADER_VALUE,
+) -> Delivery:
+    """Signiert eine Zustellung nach Standard Webhooks.
+
+    ``auth_header_value=None`` laesst den Auth-Header weg.
+    """
+    body = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
+    sent_at = int(time.time()) if timestamp is None else timestamp
+    headers = {
+        "content-type": "application/json",
+        "webhook-id": webhook_id,
+        "webhook-timestamp": str(sent_at),
+        "webhook-signature": sign_delivery(
+            decode_signing_secret(secret), webhook_id, sent_at, body
+        ),
+    }
+    if auth_header_value is not None:
+        headers["Authorization"] = auth_header_value
+    return Delivery(body=body, headers=headers)
 
 
 def load_fixture(name: str) -> dict[str, Any]:
@@ -114,10 +161,12 @@ class FakeBackends:
 
 async def post_webhooks(
     backends: FakeBackends,
-    payloads: Sequence[dict[str, Any]],
-    secret: Optional[str] = None,
+    deliveries: Sequence[Union[dict[str, Any], Delivery]],
 ) -> list[httpx.Response]:
-    """Startet die App mit Lifespan und sendet die Payloads nacheinander."""
+    """Startet die App mit Lifespan und sendet die Zustellungen nacheinander.
+
+    Payloads (dict) werden gueltig signiert; ``Delivery`` wird unveraendert gesendet.
+    """
     from app.main import app
 
     original_client = httpx.AsyncClient
@@ -135,9 +184,14 @@ async def post_webhooks(
             async with original_client(
                 transport=asgi, base_url="http://testserver"
             ) as client:
-                for payload in payloads:
+                for index, item in enumerate(deliveries):
+                    delivery = (
+                        item
+                        if isinstance(item, Delivery)
+                        else signed_delivery(item, webhook_id=f"msg_test_{index:04d}")
+                    )
                     response = await client.post(
-                        f"/webhook/mondoo/{secret or SECRET}", json=payload
+                        WEBHOOK_PATH, content=delivery.body, headers=delivery.headers
                     )
                     responses.append(response)
     return responses

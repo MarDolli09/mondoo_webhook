@@ -4,8 +4,6 @@ from typing import Optional
 
 __all__ = [
     "CatalogOrderError",
-    "ConfigurationError",
-    "InvalidSecretKeyError",
     "MondooAPIError",
     "MondooGraphQLError",
     "PaginationLimitExceededError",
@@ -14,6 +12,7 @@ __all__ = [
     "SearchBudgetExceededError",
     "ServiceNowAPIError",
     "ServiceNowAuthError",
+    "WebhookAuthenticationError",
     "WebhookError",
 ]
 
@@ -32,27 +31,19 @@ class WebhookError(Exception):
 
 
 # ---------------------------------------------------------------------- #
-# Konfiguration und Eingang
+# Eingang
 # ---------------------------------------------------------------------- #
 
 
-class ConfigurationError(WebhookError):
-    """Die Anwendung ist nicht lauffaehig konfiguriert."""
+class WebhookAuthenticationError(WebhookError):
+    """Die Zustellung ist nicht als Mondoo-Webhook authentifiziert.
 
-    status_code = 500
-    prefix = "Konfigurationsfehler: "
-
-
-class InvalidSecretKeyError(WebhookError):
-    """Der Secret Key im Webhook-Pfad stimmt nicht.
-
-    Antwortet bewusst mit 404 statt 401, damit die Existenz des Endpunkts
-    nicht bestaetigt wird.
+    Die Antwort nennt bewusst keinen Grund; der steht nur im Log.
     """
 
-    status_code = 404
+    status_code = 401
 
-    def __init__(self, message: str = "Endpoint not found") -> None:
+    def __init__(self, message: str = "Unauthorized") -> None:
         super().__init__(message)
 
 

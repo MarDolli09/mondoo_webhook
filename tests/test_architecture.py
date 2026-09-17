@@ -77,7 +77,10 @@ class ArchitectureTest(unittest.TestCase):
                         self.fail(f"{importer} umgeht die Fassade: {target}")
 
     def test_foundation_packages_import_without_environment(self) -> None:
-        code = "import app.domain.ports, app.domain.priority, app.models.mondoo"
+        code = (
+            "import app.domain.ports, app.domain.priority, app.models.mondoo, "
+            "app.core.webhook_signature"
+        )
         env = {"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(ROOT)}
         result = subprocess.run(
             [sys.executable, "-c", code],
