@@ -265,7 +265,7 @@ class ServiceNowAPI:
                 raise ServiceNowAPIError(
                     f"HTTP {response.status_code} bei {method} {path}: "
                     f"{response.text[:ERROR_TEXT_LIMIT]}",
-                    status_code=response.status_code,
+                    upstream_status=response.status_code,
                 )
 
             payload: dict[str, Any] = response.json() if response.content else {}

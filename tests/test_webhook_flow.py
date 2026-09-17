@@ -163,6 +163,29 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("falsches-token-4711", message)
             self.assertNotIn(expected_value.split()[-1], message)
 
+    async def test_servicenow_errors_are_reported_as_bad_gateway(self) -> None:
+        payload = load_fixture("case_created_vulnerability.json")
+        token_rejected = FakeBackends(token_status=401)
+        lookup_forbidden = FakeBackends(lookup_status=403)
+        receiver_logger = logging.getLogger("mondoo-receiver")
+        receiver_logger.disabled = False
+        try:
+            with self.assertLogs(receiver_logger, level="ERROR") as captured:
+                (token_response,) = await post_webhooks(token_rejected, [payload])
+            (lookup_response,) = await post_webhooks(lookup_forbidden, [payload])
+        finally:
+            receiver_logger.disabled = True
+
+        self.assertEqual(token_response.status_code, 502)
+        self.assertEqual(lookup_response.status_code, 502)
+        self.assertEqual(token_rejected.find("servicenow", "POST", "/order_now"), [])
+        token_log = next(m for m in captured.output if "OAuth-Token" in m)
+        self.assertIn("HTTP 401", token_log)
+        self.assertIn("error_description='access_denied'", token_log)
+        self.assertIn("Leerzeichen am Rand in: keine", token_log)
+        for secret in ("SNOW_CLIENT_SECRET", "SNOW_PASSWORD"):
+            self.assertNotIn(os.environ[secret], token_log)
+
     async def test_authenticated_but_invalid_payloads(self) -> None:
         backends = FakeBackends()
         missing_mrn, not_json = await post_webhooks(

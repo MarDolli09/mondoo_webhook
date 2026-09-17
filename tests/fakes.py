@@ -91,6 +91,8 @@ class FakeBackends:
     cvss_nodes: list[dict[str, Any]] = field(default_factory=list)
     requests: list[RecordedRequest] = field(default_factory=list)
     token_fetches: int = 0
+    token_status: int = 200
+    lookup_status: int = 200
 
     def transport(self) -> httpx.MockTransport:
         """httpx-Transport, der alle Requests an diese Attrappen leitet."""
@@ -134,8 +136,16 @@ class FakeBackends:
         query = params.get("sysparm_query", "")
         if path == "/oauth_token.do":
             self.token_fetches += 1
+            if self.token_status != 200:
+                oauth_error = {
+                    "error": "server_error",
+                    "error_description": "access_denied",
+                }
+                return httpx.Response(self.token_status, json=oauth_error)
             token = {"access_token": f"tok-{self.token_fetches}", "expires_in": 1800}
             return httpx.Response(200, json=token)
+        if self.lookup_status != 200 and query.startswith("correlation_id="):
+            return httpx.Response(self.lookup_status, json={"error": "simuliert"})
         if path == "/api/now/table/sc_req_item" and query.startswith("correlation_id="):
             cid = query[len("correlation_id=") :].split("^ORDERBY")[0]
             records = self.ritms_by_correlation_id.get(cid, [])

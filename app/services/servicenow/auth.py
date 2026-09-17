@@ -17,6 +17,7 @@ from app.services.servicenow.constants import (
 __all__ = ["ServiceNowAuth"]
 
 DEFAULT_TOKEN_LIFETIME_SECONDS = 1800.0
+OAUTH_ERROR_TEXT_LIMIT = 200
 
 
 class ServiceNowAuth:
@@ -101,9 +102,15 @@ class ServiceNowAuth:
             ) from exc
 
         if response.status_code != 200:
+            logger.error(
+                f"OAuth-Token von {self._base_url} abgelehnt: HTTP "
+                f"{response.status_code}, {_oauth_error_details(response)}, "
+                f"Benutzer '{settings.SNOW_USER}', Leerzeichen am Rand in: "
+                f"{_credentials_with_edge_whitespace()}"
+            )
             raise ServiceNowAuthError(
                 f"OAuth Token-Generierung fehlgeschlagen ({response.status_code})",
-                status_code=401 if response.status_code == 401 else 502,
+                upstream_status=response.status_code,
             )
 
         body = response.json()
@@ -112,3 +119,28 @@ class ServiceNowAuth:
             raise ServiceNowAuthError("OAuth-Antwort enthaelt kein access_token")
 
         return token, float(body.get("expires_in", DEFAULT_TOKEN_LIFETIME_SECONDS))
+
+
+def _oauth_error_details(response: httpx.Response) -> str:
+    """Fehlerfelder der OAuth-Antwort von ServiceNow; enthalten keine Secrets."""
+    try:
+        body = response.json()
+    except ValueError:
+        return "Antwort ohne JSON"
+    if not isinstance(body, dict):
+        return "Antwort ohne Fehlerfelder"
+    error = str(body.get("error", ""))[:OAUTH_ERROR_TEXT_LIMIT]
+    description = str(body.get("error_description", ""))[:OAUTH_ERROR_TEXT_LIMIT]
+    return f"error={error!r}, error_description={description!r}"
+
+
+def _credentials_with_edge_whitespace() -> str:
+    """Welche Zugangsdaten Leerzeichen/Umbrueche am Rand haben (ohne Werte)."""
+    credentials = {
+        "SNOW_CLIENT_ID": settings.SNOW_CLIENT_ID,
+        "SNOW_CLIENT_SECRET": settings.SNOW_CLIENT_SECRET.get_secret_value(),
+        "SNOW_USER": settings.SNOW_USER,
+        "SNOW_PASSWORD": settings.SNOW_PASSWORD.get_secret_value(),
+    }
+    affected = [name for name, value in credentials.items() if value != value.strip()]
+    return ", ".join(affected) or "keine"

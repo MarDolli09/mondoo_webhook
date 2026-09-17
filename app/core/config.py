@@ -5,6 +5,7 @@ Fachliche Stammdaten stehen in ``app.core.master_data``.
 
 import os
 import re
+from urllib.parse import urlsplit
 
 from pydantic import (
     PositiveInt,
@@ -100,6 +101,24 @@ class Settings(BaseSettings):
         # HTTP-Headerwerte haben nie Whitespace am Rand; ein beim Einfuegen in den
         # Key Vault mitkopierter Zeilenumbruch wuerde sonst nie uebereinstimmen.
         return SecretStr(value.get_secret_value().strip())
+
+    @field_validator("SNOW_INSTANCE_URL")
+    @classmethod
+    def _require_instance_base_url(cls, value: str) -> str:
+        # Pfade wie /oauth_token.do haengt die Anwendung selbst an.
+        parts = urlsplit(value.strip())
+        if (
+            parts.scheme != "https"
+            or not parts.netloc
+            or parts.path not in ("", "/")
+            or parts.query
+            or parts.fragment
+        ):
+            raise ValueError(
+                "SNOW_INSTANCE_URL muss nur die Instanz-Adresse enthalten, z. B. "
+                "https://<instanz>.service-now.com - ohne Pfad wie /oauth_token.do."
+            )
+        return value.strip()
 
     @field_validator("MONDOO_WEBHOOK_AUTH_HEADER")
     @classmethod

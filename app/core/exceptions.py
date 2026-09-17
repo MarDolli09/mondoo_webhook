@@ -18,14 +18,16 @@ __all__ = [
 
 
 class WebhookError(Exception):
-    """Basisklasse aller Projektausnahmen."""
+    """Basisklasse aller Projektausnahmen.
+
+    ``status_code`` ist der HTTP-Status der Antwort an den Aufrufer (Mondoo).
+    """
 
     status_code: int = 400
     prefix: str = ""
 
-    def __init__(self, message: str, status_code: Optional[int] = None) -> None:
+    def __init__(self, message: str) -> None:
         self.message = f"{self.prefix}{message}" if self.prefix else message
-        self.status_code = status_code if status_code is not None else self.status_code
         # Ohne diesen Aufruf bleibt Exception.args leer und str(exc) liefert "".
         super().__init__(self.message)
 
@@ -99,16 +101,24 @@ class SearchBudgetExceededError(MondooAPIError):
 
 
 class ServiceNowAPIError(WebhookError):
-    """Kommunikation mit der ServiceNow REST-Schnittstelle fehlgeschlagen."""
+    """Kommunikation mit der ServiceNow REST-Schnittstelle fehlgeschlagen.
+
+    Die Antwort an Mondoo ist immer 502: Der Webhook war in Ordnung, das
+    nachgelagerte System nicht. Den Status von ServiceNow haelt
+    ``upstream_status`` fest; ein 401 von ServiceNow darf nicht als 401 des
+    Webhooks erscheinen.
+    """
 
     status_code = 502
     prefix = "ServiceNow API Kommunikation fehlgeschlagen: "
 
+    def __init__(self, message: str, upstream_status: Optional[int] = None) -> None:
+        super().__init__(message)
+        self.upstream_status = upstream_status
+
 
 class ServiceNowAuthError(ServiceNowAPIError):
     """Anmeldung oder Tokenbeschaffung fehlgeschlagen."""
-
-    status_code = 401
 
 
 class CatalogOrderError(ServiceNowAPIError):
@@ -121,5 +131,3 @@ class RequestItemNotFoundError(ServiceNowAPIError):
     Deutet in aller Regel darauf hin, dass am Katalogformular kein Workflow
     hinterlegt ist.
     """
-
-    status_code = 404

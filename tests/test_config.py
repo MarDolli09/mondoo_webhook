@@ -79,6 +79,30 @@ class SettingsStartupTest(unittest.TestCase):
         self.assertIn("MONDOO_WEBHOOK_AUTH_HEADER_VALUE", result.stderr)
         self.assertNotIn("geheimes-token-4711", result.stderr)
 
+    def test_instance_url_with_path_fails_start(self) -> None:
+        for url in (
+            "https://instanz.service-now.com/oauth_token.do",
+            "http://instanz.service-now.com",
+            "instanz.service-now.com",
+        ):
+            env = {
+                "PATH": os.environ.get("PATH", ""),
+                "PYTHONPATH": str(ROOT),
+                "APP_ENV_FILE": str(ROOT / "tests" / ".env.test"),
+                "SNOW_INSTANCE_URL": url,
+            }
+            result = subprocess.run(
+                [sys.executable, "-c", "import app.core.config"],
+                cwd=ROOT / "tests",
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            with self.subTest(url):
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("ohne Pfad wie /oauth_token.do", result.stderr)
+
 
 class WebhookSecretNormalizationTest(unittest.TestCase):
     def test_surrounding_whitespace_is_removed(self) -> None:
