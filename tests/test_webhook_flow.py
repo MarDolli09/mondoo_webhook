@@ -1,6 +1,8 @@
 """Ende-zu-Ende: Webhook -> Parsing -> ServiceNow gegen Attrappen."""
 
 import copy
+import logging
+import os
 import time
 import unittest
 
@@ -131,6 +133,35 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(response.status_code, 401, label)
             self.assertEqual(response.json()["detail"], "Unauthorized", label)
         self.assertEqual(backends.requests, [])
+
+    async def test_rejection_log_explains_cause_without_secret_values(self) -> None:
+        payload = load_fixture("case_created_vulnerability.json")
+        wrong_value = "Bearer falsches-token-4711"
+        deliveries = [
+            signed_delivery(
+                payload, webhook_id="msg_diag", auth_header_value=wrong_value
+            ),
+            Delivery(b"{}", {"user-agent": "scanner/1.0"}),
+        ]
+        receiver_logger = logging.getLogger("mondoo-receiver")
+        receiver_logger.disabled = False
+        try:
+            with self.assertLogs(receiver_logger, level="WARNING") as captured:
+                await post_webhooks(FakeBackends(), deliveries)
+        finally:
+            receiver_logger.disabled = True
+
+        rejections = [m for m in captured.output if "Webhook abgewiesen" in m]
+        wrong_header, not_from_mondoo = rejections
+        self.assertIn("Wert stimmt nicht", wrong_header)
+        self.assertIn("Signatur: gueltig (webhook-id msg_diag)", wrong_header)
+        self.assertIn("Header 'Authorization': fehlt", not_from_mondoo)
+        self.assertIn("Signatur-Header fehlen", not_from_mondoo)
+        self.assertIn("scanner/1.0", not_from_mondoo)
+        expected_value = os.environ["MONDOO_WEBHOOK_AUTH_HEADER_VALUE"]
+        for message in captured.output:
+            self.assertNotIn("falsches-token-4711", message)
+            self.assertNotIn(expected_value.split()[-1], message)
 
     async def test_authenticated_but_invalid_payloads(self) -> None:
         backends = FakeBackends()

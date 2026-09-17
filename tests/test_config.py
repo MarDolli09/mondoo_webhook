@@ -6,7 +6,10 @@ import sys
 import unittest
 from pathlib import Path
 
+from pydantic import SecretStr
+
 import tests  # noqa: F401  (Dummy-Umgebung)
+from app.core.config import Settings
 
 ROOT = Path(__file__).resolve().parent.parent
 SECRET = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkdW1teSJ9.geheimes-signatur-ende-4711"
@@ -55,6 +58,22 @@ class SettingsStartupTest(unittest.TestCase):
         self.assertIn("MONDOO_WEBHOOK_SIGNING_SECRET", result.stderr)
         self.assertIn("whsec_", result.stderr)
         self.assertNotIn("geheimwert-4711", result.stderr)
+
+
+class WebhookSecretNormalizationTest(unittest.TestCase):
+    def test_surrounding_whitespace_is_removed(self) -> None:
+        signing_secret = os.environ["MONDOO_WEBHOOK_SIGNING_SECRET"]
+        configured = Settings(  # type: ignore[call-arg]
+            MONDOO_WEBHOOK_AUTH_HEADER_VALUE=SecretStr("  Bearer token-mit-umbruch \n"),
+            MONDOO_WEBHOOK_SIGNING_SECRET=SecretStr(f"{signing_secret}\n"),
+        )
+        self.assertEqual(
+            configured.MONDOO_WEBHOOK_AUTH_HEADER_VALUE.get_secret_value(),
+            "Bearer token-mit-umbruch",
+        )
+        self.assertEqual(
+            configured.MONDOO_WEBHOOK_SIGNING_SECRET.get_secret_value(), signing_secret
+        )
 
 
 if __name__ == "__main__":

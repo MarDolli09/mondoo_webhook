@@ -89,6 +89,15 @@ class Settings(BaseSettings):
             )
         return value
 
+    @field_validator(
+        "MONDOO_WEBHOOK_SIGNING_SECRET", "MONDOO_WEBHOOK_AUTH_HEADER_VALUE"
+    )
+    @classmethod
+    def _strip_surrounding_whitespace(cls, value: SecretStr) -> SecretStr:
+        # HTTP-Headerwerte haben nie Whitespace am Rand; ein beim Einfuegen in den
+        # Key Vault mitkopierter Zeilenumbruch wuerde sonst nie uebereinstimmen.
+        return SecretStr(value.get_secret_value().strip())
+
     @field_validator("MONDOO_WEBHOOK_SIGNING_SECRET")
     @classmethod
     def _require_standard_webhooks_secret(cls, value: SecretStr) -> SecretStr:
