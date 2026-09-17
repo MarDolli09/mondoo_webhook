@@ -45,17 +45,6 @@ class Settings(BaseSettings):
         "//captain.api.mondoo.app/users/2nZF38ZPg7vhizUrgIHqRF1aUwu": "Alexander Haller"
     }
 
-    ASSIGNMENTGROUP_MAP: Dict[str, str] = {
-        "eu-elastic-hodgkin-413342": "Mosca IT - Infrastructure Server & Storage",
-        "eu-peaceful-elgamal-693498": "Mosca IT - Security",
-        "eu-loving-lichterman-592949": "Mosca IT - Infrastrukture External Network (WAN / Access)",
-        "eu-crazy-driscoll-397797": "Mosca IT - Infrastructure Internal Network (LAN / WLAN)",
-        "eu-hungry-maxwell-418237":  "Mosca IT - Infrastructure Server & Storage",
-        "eu-vigorous-mcnulty-229373": "Mosca IT - M365 General",
-        "eu-nifty-mendeleev-113214": "Mosca IT - Infrastructure Server & Storage",
-        "eu-great-goldwasser-976351": "Mosca IT - Infrastructure Server & Storage",
-        "eu-sweet-sanderson-152264": "Mosca IT - Client General",
-    }
 
     PRIORITY_MAP: Dict[str, Tuple[str, str]] = { 
         "CRITICAL": ("1", "1"), # Urgency: 1 - Critical, Impact: 1 - Critical
