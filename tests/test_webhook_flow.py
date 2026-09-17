@@ -155,7 +155,7 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
         wrong_header, not_from_mondoo = rejections
         self.assertIn("Wert stimmt nicht", wrong_header)
         self.assertIn("Signatur: gueltig (webhook-id msg_diag)", wrong_header)
-        self.assertIn("Header 'Authorization': fehlt", not_from_mondoo)
+        self.assertIn("Auth-Header: fehlt", not_from_mondoo)
         self.assertIn("Signatur-Header fehlen", not_from_mondoo)
         self.assertIn("scanner/1.0", not_from_mondoo)
         expected_value = os.environ["MONDOO_WEBHOOK_AUTH_HEADER_VALUE"]

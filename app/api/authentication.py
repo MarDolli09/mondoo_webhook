@@ -42,9 +42,8 @@ async def authenticate_delivery(
         WebhookAuthenticationError: Header fehlt oder stimmt nicht, oder die
             Signatur ist ungueltig bzw. veraltet.
     """
-    header_name = settings.MONDOO_WEBHOOK_AUTH_HEADER
     header_problem = _diagnose_auth_header(
-        request.headers.get(header_name),
+        request.headers.get(settings.MONDOO_WEBHOOK_AUTH_HEADER),
         settings.MONDOO_WEBHOOK_AUTH_HEADER_VALUE.get_secret_value(),
     )
 
@@ -62,7 +61,7 @@ async def authenticate_delivery(
         return AuthenticatedDelivery(webhook_id=webhook_id, body=body)
 
     logger.warning(
-        f"Webhook abgewiesen | Header '{header_name}': {header_problem or 'ok'} "
+        f"Webhook abgewiesen | Auth-Header: {header_problem or 'ok'} "
         f"| Signatur: {signature_result} "
         f"| User-Agent: {_header_for_log(request, 'user-agent')} "
         f"| X-Forwarded-For: {_header_for_log(request, 'x-forwarded-for')}"

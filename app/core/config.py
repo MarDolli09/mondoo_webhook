@@ -4,6 +4,7 @@ Fachliche Stammdaten stehen in ``app.core.master_data``.
 """
 
 import os
+import re
 
 from pydantic import (
     PositiveInt,
@@ -19,6 +20,8 @@ from app.core.webhook_signature import decode_signing_secret
 __all__ = ["SETTINGS_CONFIG", "Settings", "settings"]
 
 UNRESOLVED_KEYVAULT_MARKER = "@Microsoft.KeyVault"
+# Zulaessige Zeichen eines HTTP-Headernamens (RFC 9110, token)
+HEADER_NAME_PATTERN = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+")
 OAUTH_AUTH_MODE = "oauth"
 
 # APP_ENV_FILE erlaubt Tests und Audits, eine Dummy-Datei statt .env zu laden.
@@ -98,6 +101,19 @@ class Settings(BaseSettings):
         # Key Vault mitkopierter Zeilenumbruch wuerde sonst nie uebereinstimmen.
         return SecretStr(value.get_secret_value().strip())
 
+    @field_validator("MONDOO_WEBHOOK_AUTH_HEADER")
+    @classmethod
+    def _require_header_name(cls, value: str) -> str:
+        # Die Meldung nennt den Wert nicht: steht hier versehentlich der Token,
+        # darf er nicht im Log landen.
+        if not HEADER_NAME_PATTERN.fullmatch(value):
+            raise ValueError(
+                "MONDOO_WEBHOOK_AUTH_HEADER ist der Name des Headers (z. B. "
+                "Authorization), kein Wert. 'Bearer <token>' gehoert nach "
+                "MONDOO_WEBHOOK_AUTH_HEADER_VALUE."
+            )
+        return value
+
     @field_validator("MONDOO_WEBHOOK_SIGNING_SECRET")
     @classmethod
     def _require_standard_webhooks_secret(cls, value: SecretStr) -> SecretStr:
@@ -117,8 +133,6 @@ class Settings(BaseSettings):
         ]
         if missing:
             raise ValueError(f"Pflicht-Geheimwerte sind leer: {', '.join(missing)}")
-        if not self.MONDOO_WEBHOOK_AUTH_HEADER.strip():
-            raise ValueError("MONDOO_WEBHOOK_AUTH_HEADER darf nicht leer sein.")
 
         if self.uses_oauth:
             oauth_missing = [

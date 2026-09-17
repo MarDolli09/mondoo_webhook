@@ -59,6 +59,26 @@ class SettingsStartupTest(unittest.TestCase):
         self.assertIn("whsec_", result.stderr)
         self.assertNotIn("geheimwert-4711", result.stderr)
 
+    def test_token_in_header_name_setting_fails_start_without_leaking_it(self) -> None:
+        env = {
+            "PATH": os.environ.get("PATH", ""),
+            "PYTHONPATH": str(ROOT),
+            "APP_ENV_FILE": str(ROOT / "tests" / ".env.test"),
+            "MONDOO_WEBHOOK_AUTH_HEADER": "Bearer geheimes-token-4711",
+        }
+        result = subprocess.run(
+            [sys.executable, "-c", "import app.core.config"],
+            cwd=ROOT / "tests",
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("MONDOO_WEBHOOK_AUTH_HEADER_VALUE", result.stderr)
+        self.assertNotIn("geheimes-token-4711", result.stderr)
+
 
 class WebhookSecretNormalizationTest(unittest.TestCase):
     def test_surrounding_whitespace_is_removed(self) -> None:
