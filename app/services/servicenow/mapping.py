@@ -1,141 +1,148 @@
-import json
-import re
-from typing import Any, Dict, List, Optional
+"""Abbildung eines NormalizedCase auf Katalogvariablen und RITM-Felder.
 
-from app.core.config import settings
+Reine Funktionen ohne I/O; die aufgeloesten sys_ids liefert der Client.
+"""
+
+from typing import Any, Optional
+
 from app.core.logging import logger
-from app.models.schemas import (
-    MondooEventType,
-    ServiceNowCase,
-    ServiceNowPayload,
-)
-from app.utils.text_cleaner import sanitize_url
-
-from .constants import (
+from app.core.master_data import AUTOMATED_CREATOR_LABEL, FIXED_WATCHERS, master_data
+from app.domain.case_text import strip_severity_prefix
+from app.domain.priority import PRIORITY_SOURCE_DEFAULT
+from app.models.case import NormalizedCase
+from app.models.mondoo import MondooEventType
+from app.services.servicenow.constants import (
     CORRELATION_ID_MAX,
-    FIXED_WATCHERS,
     SHORT_DESCRIPTION_MAX,
     STATE_CLOSED_COMPLETE,
     STATE_CLOSED_SKIPPED,
     STATE_OPEN,
 )
 
-SPACE_ID_PATTERN = re.compile(r"/spaces/([^/]+)")
+__all__ = [
+    "build_catalog_variables",
+    "build_create_fields",
+    "build_update_fields",
+    "correlation_id",
+    "creator_display_name",
+    "ticket_title",
+    "watcher_identifiers",
+]
 
-FALLBACK_ASSIGNMENT_GROUP = "Mosca IT - Security"
-
-
-# ---------------------------------------------------------------------- #
-# Helfer
-# ---------------------------------------------------------------------- #
-
-def truncate(value: str, limit: int) -> str:
-    if not value:
-        return ""
-    return value if len(value) <= limit else value[: limit - 1] + "\u2026"
-
-
-def extract_space_id(owner_mrn: str) -> str:
-    match = SPACE_ID_PATTERN.search(owner_mrn or "")
-    return match.group(1) if match else ""
+TICKET_TITLE_PREFIX = "Mondoo - "
+ELLIPSIS = "…"
+WATCH_LIST_SEPARATOR = ","
 
 
-def correlation_id(payload: ServiceNowPayload) -> str:
-    return truncate(payload.case.mrn, CORRELATION_ID_MAX)
+def correlation_id(case: NormalizedCase) -> str:
+    """Schluessel, ueber den ein RITM dem Mondoo-Case zugeordnet wird."""
+    return _truncate(case.mrn, CORRELATION_ID_MAX)
 
 
-def assignment_group_name(payload: ServiceNowPayload) -> str:
-    space_id = extract_space_id(payload.case.ownerMrn)
-    group_name = settings.ASSIGNMENTGROUP_MAP.get(space_id)
-    if not group_name:
-        logger.warning(
-            f"Keine Assignment Group fuer Space '{space_id}' hinterlegt. "
-            f"Fallback auf '{FALLBACK_ASSIGNMENT_GROUP}'."
-        )
-        return FALLBACK_ASSIGNMENT_GROUP
-    return group_name
+def ticket_title(case: NormalizedCase) -> str:
+    """Tickettitel ``Mondoo - <Mondoo-Titel ohne Schweregrad-Tag>``."""
+    title = f"{TICKET_TITLE_PREFIX}{strip_severity_prefix(case.title)}"
+    return _truncate(title, SHORT_DESCRIPTION_MAX)
 
 
-def watcher_names(payload: ServiceNowPayload) -> List[str]:
-    case = payload.case
+def watcher_identifiers(case: NormalizedCase) -> list[str]:
+    """Feste Beobachter und, bei menschlichem Ersteller, dessen Name."""
     watchers = list(FIXED_WATCHERS)
 
-    # Wenn menschlicher Ersteller vorhanden: Namen über USER_MAP auflösen
-    if not case.isAutomated and case.createdBy:
-        creator_name = settings.USER_MAP.get(case.createdBy.strip())
+    if not case.is_automated and case.created_by:
+        creator_name = master_data.USER_MAP.get(case.created_by.strip())
         if creator_name:
-            normalized_watchers = {w.strip().lower() for w in watchers}
-            if creator_name.strip().lower() not in normalized_watchers:
+            known = {watcher.strip().lower() for watcher in watchers}
+            if creator_name.strip().lower() not in known:
                 watchers.append(creator_name.strip())
 
     return watchers
 
-def resolve_creator_name(case: ServiceNowCase) -> str:
-    if case.isAutomated or not case.createdBy:
-        return "Mondoo-Drift"
-    
-    mrn = case.createdBy.strip()
-    return settings.USER_MAP.get(mrn, mrn)
+
+def creator_display_name(case: NormalizedCase) -> str:
+    """Name des Erstellers laut USER_MAP, sonst dessen MRN."""
+    if case.is_automated or not case.created_by:
+        return AUTOMATED_CREATOR_LABEL
+
+    creator_mrn = case.created_by.strip()
+    return master_data.USER_MAP.get(creator_mrn, creator_mrn)
 
 
-# ---------------------------------------------------------------------- #
-# Katalogvariablen
-# ---------------------------------------------------------------------- #
+def build_catalog_variables(case: NormalizedCase) -> dict[str, str]:
+    """Variablen des Katalogformulars "Mondoo Vulnerability" fuer ``order_now``.
 
-def build_variables(payload: ServiceNowPayload) -> Dict[str, str]:
-    case = payload.case
-
-    mrvs_rows: List[Dict[str, str]] = [
-        {
-            "asset_name": asset.asset_name_name,
-            "asset_url": sanitize_url(asset.asset_name_url),
-            "platform": asset.platform,
-        }
-        for asset in case.remediations.table
-    ]
-
+    Reihenfolge wie im Formular. ``mondoo_mrn`` wird in ServiceNow per
+    "Map to field" nach ``correlation_id`` uebernommen.
+    """
     return {
-        "mondoo_mrn": correlation_id(payload),
-        "mondoo_title": truncate(case.title, SHORT_DESCRIPTION_MAX),
-        "mondoo_cve": case.findingCVE or "",
-        "cvss_score": case.cvssScore or "",
-        "cvss_rating": case.cvssRiskRating or "",
-        "risk_rating": case.riskRating or "",
-        "risk_score": case.riskScore or "",
-        "mondoo_space": case.mondooSpace or "",
-        "finding_type": case.ticketType or "",
-        "ticket_url": sanitize_url(case.ticket_url),
-        "assets_count": str(case.assetsCount or len(case.remediations.table)),
-        "mondoo_created_by": resolve_creator_name(case),
-        "mondoo_assets": json.dumps(mrvs_rows, ensure_ascii=False),
+        "mondoo_title": ticket_title(case),
+        "mondoo_cve": case.finding_cve,
+        "cvss_score": case.cvss_score,
+        "cvss_rating": case.cvss_rating,
+        "risk_rating": case.risk_rating,
+        "risk_score": case.risk_score,
+        "urgency": case.urgency,
+        "impact": case.impact,
+        "mondoo_space": case.mondoo_space,
+        "finding_type": case.finding_type,
+        "ticket_url": case.ticket_url,
+        "assets_count": str(case.assets_count),
+        "mondoo_created_by": creator_display_name(case),
+        "mondoo_mrn": correlation_id(case),
     }
 
 
-# ---------------------------------------------------------------------- #
-# Textfelder
-# ---------------------------------------------------------------------- #
+def build_create_fields(
+    case: NormalizedCase,
+    *,
+    opened_by_sys_id: Optional[str],
+    watcher_sys_ids: list[str],
+) -> dict[str, Any]:
+    """RITM-Felder direkt nach der Bestellung eines neuen Requests.
 
-
-
-def build_work_notes(payload: ServiceNowPayload, *, is_initial: bool) -> str:
-    case = payload.case
-    if is_initial:
-        return (
+    Urgency und Impact uebernimmt ServiceNow aus den Katalogvariablen.
+    """
+    body: dict[str, Any] = {
+        "work_notes": (
             f"Automatisch angelegt aus Mondoo-Ticket.\n"
-            f"Mondoo createdAt: {case.createdAt}"
+            f"Mondoo createdAt: {case.created_at}"
+        ),
+        "state": STATE_OPEN,
+        "correlation_id": correlation_id(case),
+        "short_description": ticket_title(case),
+    }
+    if opened_by_sys_id:
+        body["opened_by"] = opened_by_sys_id
+    if watcher_sys_ids:
+        # GlideList erwartet kommagetrennte sys_ids
+        body["watch_list"] = WATCH_LIST_SEPARATOR.join(watcher_sys_ids)
+    return body
+
+
+def build_update_fields(case: NormalizedCase) -> dict[str, Any]:
+    """RITM-Felder fuer ein Folgeereignis, inklusive Abschluss bei Close/Delete."""
+    body: dict[str, Any] = {
+        "work_notes": (
+            f"Mondoo-Update ({case.raw_event_type}) vom {case.updated_at}\n"
+            f"CVSS: {case.cvss_score or '-'} ({case.cvss_rating or '-'}) | "
+            f"Betroffene Assets: {case.assets_count}"
+        ),
+    }
+
+    if case.priority_source != PRIORITY_SOURCE_DEFAULT:
+        body["urgency"] = case.urgency
+        body["impact"] = case.impact
+    else:
+        logger.info(
+            "Prioritaet nicht ermittelbar (Quelle 'default'). urgency/impact "
+            "bleiben unveraendert."
         )
-    return (
-        f"Mondoo-Update ({case.ticketState}) vom {case.updatedAt}\n"
-        f"CVSS: {case.cvssScore or '-'} ({case.cvssRiskRating or '-'}) | "
-        f"Betroffene Assets: {case.assetsCount}"
-    )
+
+    body.update(_closing_fields(case.event_type))
+    return body
 
 
-# ---------------------------------------------------------------------- #
-# Task-Felder
-# ---------------------------------------------------------------------- #
-
-def _closing_fields(event_type: MondooEventType) -> Dict[str, Any]:
+def _closing_fields(event_type: MondooEventType) -> dict[str, Any]:
     if event_type is MondooEventType.CLOSED:
         return {
             "state": STATE_CLOSED_COMPLETE,
@@ -157,43 +164,7 @@ def _closing_fields(event_type: MondooEventType) -> Dict[str, Any]:
     return {}
 
 
-def build_task_fields(
-    payload: ServiceNowPayload,
-    *,
-    is_initial: bool,
-    group_sys_id: Optional[str] = None,
-    opened_by_sys_id: Optional[str] = None,
-    watcher_sys_ids: Optional[List[str]] = None,
-) -> Dict[str, Any]:
-    case = payload.case
-
-    body: Dict[str, Any] = {
-        "work_notes": build_work_notes(payload, is_initial=is_initial),
-    }
-
-    if is_initial or case.prioritySource != "default":
-        body["urgency"] = case.urgency
-        body["impact"] = case.impact
-    else:
-        logger.info(
-            "Prioritaet nicht ermittelbar (Quelle 'default'). urgency/impact "
-            "bleiben unveraendert."
-        )
-
-    if group_sys_id:
-        body["assignment_group"] = group_sys_id
-
-    if is_initial:
-        body["state"] = STATE_OPEN
-        body["correlation_id"] = correlation_id(payload)
-        body["short_description"] = truncate(case.title, SHORT_DESCRIPTION_MAX)
-        
-        if opened_by_sys_id:
-            body["opened_by"] = opened_by_sys_id
-
-        if watcher_sys_ids:
-            # GlideList erwartet kommagetrennte Sys-IDs
-            body["watch_list"] = ",".join(watcher_sys_ids)
-
-    body.update(_closing_fields(case.eventType))
-    return body
+def _truncate(value: str, limit: int) -> str:
+    if not value:
+        return ""
+    return value if len(value) <= limit else value[: limit - 1] + ELLIPSIS

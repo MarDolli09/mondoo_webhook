@@ -1,5 +1,1 @@
-from app.services.ticket_parser import TicketParserService
-
-__all__ = [
-    "TicketParserService",
-]
+"""Container der Teilsysteme ``mondoo``, ``parsing`` und ``servicenow``."""

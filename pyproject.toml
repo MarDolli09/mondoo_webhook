@@ -1,0 +1,42 @@
+# Projektstandards fuer Formatierung, Linting und Typpruefung.
+# Laufzeitabhaengigkeiten stehen in requirements.txt (Azure App Service Build).
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle Fehler
+    "W",    # pycodestyle Warnungen
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "C90",  # mccabe
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-spezifisch
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "tests"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends"]
+
+[tool.mypy]
+python_version = "3.9"
+files = ["app", "main.py", "tests"]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+strict_equality = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unused_ignores = true

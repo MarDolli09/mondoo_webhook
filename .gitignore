@@ -13,3 +13,5 @@ env/
 *.zip
 dist/
 build/
+.ruff_cache/
+.mypy_cache/

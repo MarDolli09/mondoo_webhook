@@ -1,7 +1,5 @@
-from app.services.mondoo.api import MondooGraphQLAPI
+"""Teilsystem Mondoo: CVSS-Anreicherung ueber die GraphQL-API."""
+
 from app.services.mondoo.client import MondooGraphQLClient
 
-__all__ = [
-    "MondooGraphQLClient",
-    "MondooGraphQLAPI",
-]
+__all__ = ["MondooGraphQLClient"]

@@ -1,25 +1,9 @@
-INTROSPECT_QUERY_ROOT = """
-query IntrospectQueryRoot {
-  __type(name: "Query") {
-    name
-    fields {
-      name
-      args {
-        name
-      }
-    }
-  }
-}
-"""
+"""GraphQL-Abfragen an die Mondoo-API."""
 
-GET_ASSET_QUERY = """
-query GetAsset($mrn: String!) {
-  asset(mrn: $mrn) {
-    name
-  }
-}
-"""
+__all__ = ["GET_FINDINGS_PAGINATED_QUERY"]
 
+# Seitengroesse 100; die Union-Aliase (cveTitle, advCvss, ...) wertet
+# app.services.mondoo.findings aus.
 GET_FINDINGS_PAGINATED_QUERY = """
 query GetFindingsPaginated($scopeMrn: String!, $cursor: String) {
   findings(scopeMrn: $scopeMrn, first: 100, after: $cursor) {

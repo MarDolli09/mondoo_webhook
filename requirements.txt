@@ -1,6 +1,8 @@
-fastapi>=0.110.0
-uvicorn[standard]>=0.28.0
-gunicorn>=21.2.0
-httpx>=0.27.0
-pydantic>=2.6.0
-pydantic-settings>=2.2.0
+# Direkte Abhaengigkeiten, getestet mit Python 3.9 (lokal); fuer CPython 3.11
+# unter Linux x86_64 (Azure) als Binary-Wheels aufloesbar.
+fastapi==0.128.8
+uvicorn[standard]==0.39.0
+gunicorn==23.0.0
+httpx==0.28.1
+pydantic==2.13.5
+pydantic-settings==2.11.0

@@ -1,0 +1,48 @@
+{
+  "body": {
+    "case": {
+      "mrn": "//policy.api.mondoo.app/spaces/eu-elastic-hodgkin-413342/cases/3JKVzRAMXeBNwdrh5LEWmiH0nLu",
+      "ownerMrn": "//captain.api.mondoo.app/spaces/eu-elastic-hodgkin-413342",
+      "title": "[NONE] Ensure that the Expiration Date is set for All Keys in Key Vaults using access policies (legacy) on kisequencingml4476893980",
+      "status": "CASE_CLOSED",
+      "createdAt": "2026-09-14T18:20:08Z",
+      "updatedAt": "2026-09-15T11:42:49Z",
+      "queryRefs": [
+        {
+          "findingMrn": "//policy.api.mondoo.app/queries/cis-microsoft-azure-foundations--8.3.2",
+          "scopeMrn": "//assets.api.mondoo.app/spaces/eu-elastic-hodgkin-413342/assets/3GlCiEMOnbZOfVWWnKHGOM2d6uY"
+        },
+        {
+          "findingMrn": "//policy.api.mondoo.app/queries/cis-microsoft-azure-foundations--8.3.2",
+          "scopeMrn": "//assets.api.mondoo.app/spaces/eu-elastic-hodgkin-413342/assets/3GlCpIF0cN84wQ35CLwNT8sRZkl"
+        },
+        {
+          "findingMrn": "//policy.api.mondoo.app/queries/cis-microsoft-azure-foundations--8.3.2",
+          "scopeMrn": "//assets.api.mondoo.app/spaces/eu-elastic-hodgkin-413342/assets/3GlD5FRBj5yeD28ziaquMVvd9Tw"
+        },
+        {
+          "findingMrn": "//policy.api.mondoo.app/queries/cis-microsoft-azure-foundations--8.3.2",
+          "scopeMrn": "//assets.api.mondoo.app/spaces/eu-elastic-hodgkin-413342/assets/3GlD5HGCHuUZLFTPHnqhTPxxTLc"
+        },
+        {
+          "findingMrn": "//policy.api.mondoo.app/queries/cis-microsoft-azure-foundations--8.3.2",
+          "scopeMrn": "//assets.api.mondoo.app/spaces/eu-elastic-hodgkin-413342/assets/3GlEUDvOmXJHDtlii5UwayXPdfA"
+        }
+      ],
+      "ticketRefs": [
+        {
+          "ticketId": "d1ce3c16-cd89-4bb8-8430-eeb56e5d1424",
+          "url": "https://app-mondoo-servicenow-webhook.example.invalid/webhook/mondoo/dummy-secret-segment",
+          "type": "WEBHOOK",
+          "IntegrationMrn": "//integration.api.mondoo.app/spaces/eu-elastic-hodgkin-413342/integrations/3HWzQGpuVkLD2oRkJzUvcGeUKqT"
+        }
+      ],
+      "assetsCount": 5,
+      "tags": {
+        "policies": "CIS Microsoft Azure Foundations Benchmark - Level 1"
+      },
+      "createdBy": "//iam.api.mondoo.app/identity/user/system"
+    },
+    "type": "TYPE_CLOSED"
+  }
+}
