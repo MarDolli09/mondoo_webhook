@@ -14,11 +14,14 @@ UNRESOLVED_KEYVAULT_MARKER = "@Microsoft.KeyVault"
 OAUTH_AUTH_MODE = "oauth"
 
 # APP_ENV_FILE erlaubt Tests und Audits, eine Dummy-Datei statt .env zu laden.
+# hide_input_in_errors: Validierungsfehler beim Start duerfen keine Werte (Secrets)
+# ins Log schreiben, nur die Namen der betroffenen Felder.
 SETTINGS_CONFIG = SettingsConfigDict(
     env_file=os.environ.get("APP_ENV_FILE", ".env"),
     env_file_encoding="utf-8",
     extra="ignore",
     case_sensitive=False,
+    hide_input_in_errors=True,
 )
 
 

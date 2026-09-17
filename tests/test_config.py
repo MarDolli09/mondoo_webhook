@@ -1,0 +1,40 @@
+"""Startverhalten der Konfiguration bei fehlenden Umgebungsvariablen."""
+
+import os
+import subprocess
+import sys
+import unittest
+from pathlib import Path
+
+import tests  # noqa: F401  (Dummy-Umgebung)
+
+ROOT = Path(__file__).resolve().parent.parent
+SECRET = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkdW1teSJ9.geheimes-signatur-ende-4711"
+
+
+class SettingsStartupTest(unittest.TestCase):
+    def test_missing_variables_are_named_without_leaking_secrets(self) -> None:
+        env = {
+            "PATH": os.environ.get("PATH", ""),
+            "PYTHONPATH": str(ROOT),
+            "APP_ENV_FILE": str(ROOT / "tests" / "does-not-exist.env"),
+            "MONDOO_API_KEY": SECRET,
+        }
+        result = subprocess.run(
+            [sys.executable, "-c", "import app.core.config"],
+            cwd=ROOT / "tests",
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SNOW_INSTANCE_URL", result.stderr)
+        self.assertIn("SNOW_AUTH_MODE", result.stderr)
+        self.assertNotIn("signatur-ende-4711", result.stderr)
+        self.assertNotIn("eyJhb", result.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()
