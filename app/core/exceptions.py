@@ -6,10 +6,8 @@ __all__ = [
     "CatalogOrderError",
     "MondooAPIError",
     "MondooGraphQLError",
-    "PaginationLimitExceededError",
     "PayloadParsingError",
     "RequestItemNotFoundError",
-    "SearchBudgetExceededError",
     "ServiceNowAPIError",
     "ServiceNowAuthError",
     "WebhookAuthenticationError",
@@ -74,25 +72,6 @@ class MondooGraphQLError(MondooAPIError):
     Betrifft sowohl das errors-Array als auch die Fehlertypen der
     Findings-Union (RequestError, NotFoundError).
     """
-
-
-class PaginationLimitExceededError(MondooAPIError):
-    """Die Suche hat die zulaessige Seitenzahl ueberschritten."""
-
-    def __init__(self, max_pages: int) -> None:
-        super().__init__(f"Paginierungslimit von {max_pages} Seiten ueberschritten.")
-
-
-class SearchBudgetExceededError(MondooAPIError):
-    """Das Zeitbudget der Suche ist erschoepft.
-
-    Kein Fehlerfall im engeren Sinn: Die Anreicherung ist optional, der Befund
-    wird ohne CVSS-Wert weiterverarbeitet. Die Ausnahme dient dazu, die
-    Suchschleife kontrolliert zu verlassen, und wird vom Aufrufer gefangen.
-    """
-
-    def __init__(self, seconds: float, pages: int) -> None:
-        super().__init__(f"Zeitbudget von {seconds}s nach {pages} Seiten erschoepft.")
 
 
 # ---------------------------------------------------------------------- #

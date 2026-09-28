@@ -13,12 +13,12 @@ from app.domain.identifiers import (
 )
 from app.domain.priority import determine_priority
 from app.domain.scores import (
-    calculate_rating_from_score,
+    NO_FINDING_SCORES,
     normalize_cvss_score,
     normalize_risk_score,
 )
 from app.models.mondoo import MondooWebhookEvent
-from app.services.mondoo.findings import extract_finding_scores
+from app.services.mondoo.findings import extract_finding_scores, highest_scores
 
 PRIORITY_MAP = {
     "CRITICAL": ("1", "1"),
@@ -62,11 +62,13 @@ class IdentifiersTest(unittest.TestCase):
 
 
 class ScoresTest(unittest.TestCase):
-    def test_cvss_stays_on_its_own_scale(self) -> None:
+    def test_cvss_comes_from_the_api_on_the_0_to_100_scale(self) -> None:
+        # Mondoo liefert 98 fuer CVSS 9.8
+        self.assertEqual(normalize_cvss_score(98), (9.8, "9.8"))
         self.assertEqual(normalize_cvss_score(6.9), (6.9, "6.9"))
         self.assertEqual(normalize_cvss_score("NONE"), (None, None))
-        # 89 ist ein Mondoo Risk Score, kein CVSS-Wert, und wird nicht umgerechnet
-        self.assertEqual(normalize_cvss_score(89), (None, None))
+        # 0 bedeutet "kein CVSS", etwa bei End-of-Life-Hinweisen
+        self.assertEqual(normalize_cvss_score(0), (None, None))
 
     def test_risk_score_keeps_the_0_to_100_scale(self) -> None:
         self.assertEqual(normalize_risk_score(89), "89")
@@ -74,27 +76,21 @@ class ScoresTest(unittest.TestCase):
         self.assertEqual(normalize_risk_score(101), None)
         self.assertEqual(normalize_risk_score(None), None)
 
-    def test_rating_from_thresholds(self) -> None:
-        thresholds = {"CRITICAL": 9.0, "HIGH": 7.0, "MEDIUM": 4.0, "LOW": 0.1}
-        self.assertEqual(calculate_rating_from_score(7.5, thresholds), "HIGH")
-        self.assertIsNone(calculate_rating_from_score(0.0, thresholds))
-
-
-THRESHOLDS = {"CRITICAL": 9.0, "HIGH": 7.0, "MEDIUM": 4.0, "LOW": 0.1}
-
 
 class FindingScoresTest(unittest.TestCase):
+    """Knoten wie in den Antworten der gefilterten Findings-Abfrage."""
+
     def test_end_of_life_advisory_without_cvss(self) -> None:
-        # Knoten wie bei MONDOO-EOL-DOTNET-8: kein CVSS-Objekt, Risk 89 HIGH
+        # MONDOO-EOL-DOTNET-8: cvss.value 0 mit Rating NONE, Risk 89 HIGH
         node = {
             "__typename": "AdvisoryFinding",
             "mrn": "//vadvisor.api.mondoo.app/advisories/MONDOO-EOL-DOTNET-8",
-            "advTitle": "End of Life for Microsoft .NET",
             "riskValue": 89,
             "rating": "HIGH",
+            "cvss": {"value": 0, "rating": "NONE"},
         }
 
-        scores = extract_finding_scores(node, THRESHOLDS)
+        scores = extract_finding_scores(node)
 
         self.assertIsNone(scores.cvss_score)
         self.assertIsNone(scores.cvss_rating)
@@ -103,21 +99,46 @@ class FindingScoresTest(unittest.TestCase):
     def test_cve_with_cvss_and_risk(self) -> None:
         node = {
             "__typename": "CveFinding",
-            "mrn": "//vadvisor.api.mondoo.app/cves/CVE-2024-0056",
-            "cveCvss": {"value": 6.9, "rating": "MEDIUM"},
-            "riskValue": 89,
-            "rating": "HIGH",
+            "mrn": "//vadvisor.api.mondoo.app/cves/CVE-2026-23450",
+            "riskValue": 97,
+            "rating": "CRITICAL",
+            "cvss": {"value": 98, "rating": "CRITICAL"},
         }
 
-        scores = extract_finding_scores(node, THRESHOLDS)
+        scores = extract_finding_scores(node)
 
-        self.assertEqual((scores.cvss_score, scores.cvss_rating), ("6.9", "MEDIUM"))
-        self.assertEqual((scores.risk_score, scores.risk_rating), ("89", "HIGH"))
-
-    def test_rating_is_derived_from_the_cvss_value(self) -> None:
-        node = {"cveCvss": {"value": 9.8}, "baseRating": "NONE"}
-        scores = extract_finding_scores(node, THRESHOLDS)
         self.assertEqual((scores.cvss_score, scores.cvss_rating), ("9.8", "CRITICAL"))
+        self.assertEqual((scores.risk_score, scores.risk_rating), ("97", "CRITICAL"))
+
+    def test_check_finding_has_a_risk_but_no_cvss(self) -> None:
+        # CheckFinding tragen kein cvss-Objekt; baseValue 100 ist kein CVSS-Wert
+        node = {
+            "__typename": "CheckFinding",
+            "mrn": "//policy.api.mondoo.app/queries/cis-azure--8.3.2",
+            "riskValue": 100,
+            "rating": "CRITICAL",
+            "baseValue": 100,
+        }
+
+        scores = extract_finding_scores(node)
+
+        self.assertIsNone(scores.cvss_score)
+        self.assertEqual((scores.risk_score, scores.risk_rating), ("100", "CRITICAL"))
+
+    def test_highest_risk_of_all_asset_nodes_counts(self) -> None:
+        # Die API liefert einen Knoten je betroffenem Asset
+        nodes = [
+            {"riskValue": 60, "rating": "MEDIUM", "cvss": {"value": 75}},
+            {"riskValue": 89, "rating": "HIGH", "cvss": {"value": 75}},
+        ]
+
+        scores = highest_scores(nodes)
+
+        self.assertEqual((scores.risk_score, scores.risk_rating), ("89", "HIGH"))
+        self.assertEqual(scores.cvss_score, "7.5")
+
+    def test_without_nodes_there_are_no_scores(self) -> None:
+        self.assertEqual(highest_scores([]), NO_FINDING_SCORES)
 
 
 class PriorityTest(unittest.TestCase):
@@ -149,8 +170,7 @@ class FindingTypeTest(unittest.TestCase):
         self.assertEqual(classify_finding_type([eol], patterns), "end-of-life")
         self.assertEqual(classify_finding_type(["//x/checks/1"], patterns), "other")
         self.assertEqual(profile_for("end-of-life").servicenow_type, "end-of-life")
-        self.assertFalse(profile_for("misconfiguration").resolves_scores)
-        self.assertFalse(profile_for("unbekannt").resolves_scores)
+        self.assertEqual(profile_for("unbekannt").servicenow_type, "other")
 
 
 class WebhookEventTest(unittest.TestCase):

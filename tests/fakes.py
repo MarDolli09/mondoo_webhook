@@ -89,7 +89,7 @@ class FakeBackends:
     ritms_by_correlation_id: dict[str, list[dict[str, Any]]] = field(
         default_factory=dict
     )
-    cvss_nodes: list[dict[str, Any]] = field(default_factory=list)
+    finding_nodes: list[dict[str, Any]] = field(default_factory=list)
     requests: list[RecordedRequest] = field(default_factory=list)
     token_fetches: int = 0
     token_status: int = 200
@@ -118,7 +118,7 @@ class FakeBackends:
 
         if str(request.url).startswith(MONDOO_ENDPOINT):
             self.requests.append(RecordedRequest("mondoo", "POST", "", {}, body))
-            return self._findings_page()
+            return self._findings()
 
         self.requests.append(
             RecordedRequest(
@@ -135,10 +135,12 @@ class FakeBackends:
         response.headers["set-cookie"] = "JSESSIONID=ABC123; Path=/; HttpOnly"
         return response
 
-    def _findings_page(self) -> httpx.Response:
-        edges = [{"node": node} for node in self.cvss_nodes]
-        page = {"pageInfo": {"hasNextPage": False, "endCursor": None}, "edges": edges}
-        return httpx.Response(200, json={"data": {"findings": page}})
+    def _findings(self) -> httpx.Response:
+        findings = {
+            "totalCount": len(self.finding_nodes),
+            "edges": [{"node": node} for node in self.finding_nodes],
+        }
+        return httpx.Response(200, json={"data": {"findings": findings}})
 
     def _servicenow(
         self, method: str, path: str, params: dict[str, str], body: Any

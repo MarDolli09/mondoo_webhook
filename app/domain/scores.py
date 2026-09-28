@@ -5,13 +5,11 @@ Mondoo unterscheidet beides: Der Risk Score ist ein kontextbezogener Wert von
 Die Werte duerfen nicht ineinander umgerechnet werden.
 """
 
-from collections.abc import Mapping
 from typing import Any, NamedTuple, Optional
 
 __all__ = [
     "NO_FINDING_SCORES",
     "FindingScores",
-    "calculate_rating_from_score",
     "normalize_cvss_score",
     "normalize_risk_score",
 ]
@@ -28,7 +26,6 @@ class FindingScores(NamedTuple):
     cvss_rating: Optional[str]
     risk_score: Optional[str]
     risk_rating: Optional[str]
-    found_on_page: Optional[int]
 
 
 NO_FINDING_SCORES = FindingScores(
@@ -36,18 +33,21 @@ NO_FINDING_SCORES = FindingScores(
     cvss_rating=None,
     risk_score=None,
     risk_rating=None,
-    found_on_page=None,
 )
 
 
 def normalize_cvss_score(raw_value: Any) -> tuple[Optional[float], Optional[str]]:
     """Normalisiert einen CVSS-Wert auf die Skala 0-10.
 
-    Liefert den Wert als Zahl und als Text mit einer Nachkommastelle, oder
-    zweimal ``None``.
+    Die Mondoo-API liefert CVSS auf der Skala 0-100 (98 entspricht 9.8). Der
+    Wert 0 bedeutet "kein CVSS", etwa bei End-of-Life-Hinweisen.
     """
     value = _as_float(raw_value)
-    if value is None or value < 0 or value > MAX_CVSS_SCORE:
+    if value is None or value <= 0:
+        return None, None
+    if value > MAX_CVSS_SCORE:
+        value = value / 10.0
+    if value > MAX_CVSS_SCORE:
         return None, None
 
     value = round(value, 1)
@@ -60,20 +60,6 @@ def normalize_risk_score(raw_value: Any) -> Optional[str]:
     if value is None or value < 0 or value > MAX_RISK_SCORE:
         return None
     return str(round(value))
-
-
-def calculate_rating_from_score(
-    score: Optional[float], thresholds: Mapping[str, float]
-) -> Optional[str]:
-    """Ermittelt das Rating ueber absteigend geordnete Schwellenwerte."""
-    if score is None:
-        return None
-
-    for rating_name, threshold in thresholds.items():
-        if score >= threshold:
-            return rating_name.upper()
-
-    return None
 
 
 def _as_float(raw_value: Any) -> Optional[float]:

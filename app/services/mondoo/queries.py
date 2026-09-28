@@ -1,84 +1,50 @@
 """GraphQL-Abfragen an die Mondoo-API."""
 
-__all__ = ["GET_FINDINGS_PAGINATED_QUERY"]
+__all__ = ["GET_FINDING_SCORES_QUERY"]
 
-# Seitengroesse 100; die Union-Aliase (cveTitle, advCvss, ...) wertet
-# app.services.mondoo.findings aus.
-GET_FINDINGS_PAGINATED_QUERY = """
-query GetFindingsPaginated($scopeMrn: String!, $cursor: String) {
-  findings(scopeMrn: $scopeMrn, first: 100, after: $cursor) {
+# Holt genau ein Finding ueber den Filter; die API liefert einen Knoten je
+# betroffenem Asset. CheckFinding und GenericFinding haben kein cvss-Objekt.
+GET_FINDING_SCORES_QUERY = """
+query GetFindingScores($scopeMrn: String!, $findingMrn: String!, $first: Int!) {
+  findings(scopeMrn: $scopeMrn, first: $first, filter: {mrn: $findingMrn}) {
     ... on FindingsConnection {
-      pageInfo {
-        hasNextPage
-        endCursor
-      }
+      totalCount
       edges {
         node {
           __typename
           ... on CveFinding {
             mrn
-            cveTitle: title
-            riskScore
             riskValue
-            baseValue
             rating
-            baseRating
-            cveCvss: cvss {
-              value
-              vector
-              rating
-            }
+            cvss { value rating }
           }
           ... on AdvisoryFinding {
             mrn
-            advTitle: title
-            riskScore
             riskValue
-            baseValue
             rating
-            baseRating
-            advCvss: cvss {
-              value
-              vector
-              rating
-            }
+            cvss { value rating }
           }
           ... on PackageFinding {
             mrn
-            pkgTitle: title
-            riskScore
             riskValue
-            baseScore
             rating
-            pkgCvss: cvss {
-              value
-              vector
-              rating
-            }
+            cvss { value rating }
           }
           ... on CheckFinding {
             mrn
-            chkTitle: title
-            riskScore
             riskValue
             rating
           }
           ... on GenericFinding {
             mrn
-            genTitle: title
-            riskScore
             riskValue
             rating
           }
         }
       }
     }
-    ... on RequestError {
-      message
-    }
-    ... on NotFoundError {
-      message
-    }
+    ... on RequestError { message }
+    ... on NotFoundError { message }
   }
 }
 """

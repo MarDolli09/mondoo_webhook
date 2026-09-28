@@ -1,23 +1,23 @@
 """GraphQL-Transport zur Mondoo-API (EU-Endpunkt)."""
 
-from typing import Any, NamedTuple, Optional
+from typing import Any, NamedTuple
 
 import httpx
 
 from app.core.exceptions import MondooAPIError, MondooGraphQLError
-from app.services.mondoo.queries import GET_FINDINGS_PAGINATED_QUERY
+from app.services.mondoo.queries import GET_FINDING_SCORES_QUERY
 
-__all__ = ["FindingsPage", "MondooGraphQLAPI"]
+__all__ = ["FindingNodes", "MondooGraphQLAPI"]
 
 ENDPOINT = "https://eu.api.mondoo.com/query"
 ERROR_TEXT_LIMIT = 400
 
 
-class FindingsPage(NamedTuple):
-    """Eine Seite der Findings-Suche."""
+class FindingNodes(NamedTuple):
+    """Antwort der Findings-Abfrage: ein Knoten je betroffenem Asset."""
 
-    edges: list[dict[str, Any]]
-    page_info: dict[str, Any]
+    nodes: list[dict[str, Any]]
+    total_count: int
 
 
 class MondooGraphQLAPI:
@@ -67,16 +67,22 @@ class MondooGraphQLAPI:
         data: dict[str, Any] = body.get("data") or {}
         return data
 
-    async def fetch_findings_page(
-        self, scope_mrn: str, cursor: Optional[str]
-    ) -> FindingsPage:
-        """Laedt eine Seite der Findings eines Scope ab ``cursor``."""
+    async def fetch_finding_nodes(
+        self, scope_mrn: str, finding_mrn: str, limit: int
+    ) -> FindingNodes:
+        """Laedt ein Finding des Scope; ein Knoten je betroffenem Asset."""
         data = await self.execute(
-            GET_FINDINGS_PAGINATED_QUERY, {"scopeMrn": scope_mrn, "cursor": cursor}
+            GET_FINDING_SCORES_QUERY,
+            {"scopeMrn": scope_mrn, "findingMrn": finding_mrn, "first": limit},
         )
         findings = data.get("findings") or {}
 
         if "message" in findings:
             raise MondooGraphQLError(f"Findings-Union: {findings['message']}")
 
-        return FindingsPage(findings.get("edges") or [], findings.get("pageInfo") or {})
+        nodes = [
+            node
+            for edge in findings.get("edges") or []
+            if (node := (edge or {}).get("node"))
+        ]
+        return FindingNodes(nodes, int(findings.get("totalCount") or len(nodes)))

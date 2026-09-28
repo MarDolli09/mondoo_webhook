@@ -60,14 +60,6 @@ class MasterData(BaseSettings):
         "LOW": ("4", "4"),
     }
 
-    # Untergrenze des CVSS-Scores je Rating, absteigend geordnet
-    CVSS_RATING_THRESHOLDS: dict[str, float] = {
-        "CRITICAL": 9.0,
-        "HIGH": 7.0,
-        "MEDIUM": 4.0,
-        "LOW": 0.1,
-    }
-
     # Pfadfragment der Finding-MRN -> Finding-Typ; die Reihenfolge ist relevant
     FINDING_TYPE_MAP: dict[str, str] = {
         "/cves/": "vulnerability",

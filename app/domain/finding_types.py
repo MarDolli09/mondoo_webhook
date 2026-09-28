@@ -15,22 +15,20 @@ DEFAULT_FINDING_TYPE = "other"
 
 @dataclass(frozen=True)
 class FindingTypeProfile:
-    """Wie ein Finding-Typ verarbeitet und an ServiceNow gemeldet wird."""
+    """Wie ein Finding-Typ an ServiceNow gemeldet wird."""
 
     servicenow_type: str
-    resolves_scores: bool
 
 
 _PROFILES: Mapping[str, FindingTypeProfile] = {
-    "vulnerability": FindingTypeProfile("vulnerability", resolves_scores=True),
-    "advisories": FindingTypeProfile("advisories", resolves_scores=True),
-    # End-of-Life-Befunde werden wie Advisories angereichert, aber als eigener
-    # Typ an ServiceNow gemeldet.
-    "end-of-life": FindingTypeProfile("end-of-life", resolves_scores=True),
+    "vulnerability": FindingTypeProfile("vulnerability"),
+    "advisories": FindingTypeProfile("advisories"),
+    # End-of-Life-Befunde werden als eigener Typ gemeldet.
+    "end-of-life": FindingTypeProfile("end-of-life"),
     # Fehlkonfigurationen tragen kein CVSS, nur ein Mondoo Risk Rating.
-    "misconfiguration": FindingTypeProfile("misconfiguration", resolves_scores=False),
+    "misconfiguration": FindingTypeProfile("misconfiguration"),
 }
-_DEFAULT_PROFILE = FindingTypeProfile(DEFAULT_FINDING_TYPE, resolves_scores=False)
+_DEFAULT_PROFILE = FindingTypeProfile(DEFAULT_FINDING_TYPE)
 
 
 def classify_finding_type(

@@ -59,11 +59,9 @@ class Settings(BaseSettings):
     SNOW_CATALOG_ITEM_SYS_ID: str
     SNOW_REQUESTED_FOR_SYS_ID: str = ""
     SNOW_USER_LOOKUP_FIELDS: list[str] = ["user_name", "email", "name"]
-    MONDOO_GRAPHQL_MAX_PAGES: int = 50
     HTTP_TIMEOUT_SECONDS: float = 10.0
-    CVSS_SEARCH_BUDGET_SECONDS: float = 20.0
-    CVSS_SEARCH_LOG_INTERVAL: int = 5
-    CVSS_MAX_FINDING_ATTEMPTS: int = 3
+    # Wie viele verschiedene Findings eines Case hoechstens abgefragt werden
+    MONDOO_MAX_FINDING_LOOKUPS: int = 5
 
     model_config = SETTINGS_CONFIG
 

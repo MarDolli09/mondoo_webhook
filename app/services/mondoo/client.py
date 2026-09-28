@@ -1,29 +1,23 @@
-"""CVSS-Suche ueber die paginierten Findings eines Mondoo-Scope."""
+"""Bewertung eines Findings ueber die gefilterte Mondoo-Abfrage."""
 
-import time
-from typing import Any, Optional
+from typing import Optional
 
 import httpx
 
 from app.core.config import settings
-from app.core.exceptions import (
-    MondooAPIError,
-    PaginationLimitExceededError,
-    SearchBudgetExceededError,
-)
+from app.core.exceptions import MondooAPIError
 from app.core.logging import logger
-from app.core.master_data import master_data
 from app.domain.identifiers import space_scope_mrn
 from app.domain.ports import FindingScoresLookup
 from app.domain.scores import NO_FINDING_SCORES, FindingScores
 from app.services.mondoo.api import MondooGraphQLAPI
-from app.services.mondoo.findings import (
-    extract_finding_scores,
-    node_matches,
-    search_key,
-)
+from app.services.mondoo.findings import highest_scores
 
 __all__ = ["MondooGraphQLClient"]
+
+# Die API liefert einen Knoten je betroffenem Asset; eine Seite genuegt fuer
+# die hoechste Bewertung, solange sie alle Assets des Findings umfasst.
+NODES_PER_FINDING = 100
 
 
 class MondooGraphQLClient(FindingScoresLookup):
@@ -42,10 +36,11 @@ class MondooGraphQLClient(FindingScoresLookup):
     async def fetch_finding_scores(
         self, finding_mrn: str, scope_mrn: str = "", space_id: str = ""
     ) -> FindingScores:
-        """Durchsucht die Findings des Scope nach dem Finding.
+        """Fragt die Bewertungen eines Findings in einem Scope ab.
 
-        Ohne ``scope_mrn`` wird der Scope aus ``space_id`` gebildet. Fehler und
-        erschoepfte Limits fuehren zu ``NO_FINDING_SCORES``.
+        Ohne ``scope_mrn`` wird der Scope aus ``space_id`` gebildet. Die
+        Anreicherung ist optional: Jeder Fehler fuehrt zu ``NO_FINDING_SCORES``,
+        der Case wird dann ohne Bewertung verarbeitet.
         """
         if not self._api.is_configured or not finding_mrn:
             return NO_FINDING_SCORES
@@ -58,13 +53,10 @@ class MondooGraphQLClient(FindingScoresLookup):
             return NO_FINDING_SCORES
 
         try:
-            return await self._search(finding_mrn, scope_mrn)
-        except (PaginationLimitExceededError, SearchBudgetExceededError) as exc:
-            logger.warning(f"{exc.message} Verarbeitung ohne Bewertung.")
+            return await self._lookup(finding_mrn, scope_mrn)
         except MondooAPIError as exc:
-            logger.error(f"Suche fuer {finding_mrn} abgebrochen: {exc.message}")
+            logger.error(f"Abfrage fuer {finding_mrn} abgebrochen: {exc.message}")
         except Exception as exc:
-            # Die Anreicherung ist optional; der Case wird ohne Werte verarbeitet.
             logger.error(
                 f"Unerwarteter Fehler beim Abruf der Bewertung fuer "
                 f"{finding_mrn}: {exc}",
@@ -72,65 +64,26 @@ class MondooGraphQLClient(FindingScoresLookup):
             )
         return NO_FINDING_SCORES
 
-    async def _search(self, finding_mrn: str, scope_mrn: str) -> FindingScores:
-        key = search_key(finding_mrn)
-        max_pages = settings.MONDOO_GRAPHQL_MAX_PAGES
-        budget = settings.CVSS_SEARCH_BUDGET_SECONDS
-        log_interval = settings.CVSS_SEARCH_LOG_INTERVAL
-        deadline = time.monotonic() + budget
+    async def _lookup(self, finding_mrn: str, scope_mrn: str) -> FindingScores:
+        result = await self._api.fetch_finding_nodes(
+            scope_mrn, finding_mrn, NODES_PER_FINDING
+        )
+        if not result.nodes:
+            logger.info(f"Mondoo kennt {finding_mrn} in {scope_mrn} nicht.")
+            return NO_FINDING_SCORES
 
-        logger.info(f"Suche nach '{key}' (max. {max_pages} Seiten, Budget {budget}s)")
-
-        cursor: Optional[str] = None
-        page = 0
-
-        while True:
-            if time.monotonic() > deadline:
-                raise SearchBudgetExceededError(budget, page)
-
-            page += 1
-            if page > max_pages:
-                raise PaginationLimitExceededError(max_pages)
-
-            findings_page = await self._api.fetch_findings_page(scope_mrn, cursor)
-
-            hit = self._match_in_page(
-                findings_page.edges, key=key, finding_mrn=finding_mrn, page=page
-            )
-            if hit:
-                return hit
-
-            if not findings_page.page_info.get("hasNextPage"):
-                logger.info(f"'{key}' in {page} Seiten nicht gefunden.")
-                return NO_FINDING_SCORES
-
-            next_cursor = findings_page.page_info.get("endCursor")
-            if next_cursor == cursor:
-                logger.warning("Paginierungs-Cursor unveraendert. Breche Suche ab.")
-                return NO_FINDING_SCORES
-            cursor = next_cursor
-
-            if page % log_interval == 0 and page < max_pages:
-                logger.info(
-                    f"'{key}' auf den Seiten {page - log_interval + 1}-{page} "
-                    f"nicht gefunden. Suche wird fortgesetzt."
-                )
-
-    @staticmethod
-    def _match_in_page(
-        edges: list[dict[str, Any]], *, key: str, finding_mrn: str, page: int
-    ) -> Optional[FindingScores]:
-        for edge in edges:
-            node = (edge or {}).get("node") or {}
-            if not node_matches(node, key=key, finding_mrn=finding_mrn):
-                continue
-
-            scores = extract_finding_scores(node, master_data.CVSS_RATING_THRESHOLDS)
+        if result.total_count > len(result.nodes):
             logger.info(
-                f"Bewertung auf Seite {page} geladen fuer {finding_mrn} "
-                f"({node.get('__typename', 'Unknown')}) -> CVSS "
-                f"{scores.cvss_score or '-'} ({scores.cvss_rating or '-'}), "
-                f"Risk {scores.risk_score or '-'} ({scores.risk_rating or '-'})"
+                f"{finding_mrn} betrifft {result.total_count} Assets, bewertet "
+                f"werden die ersten {len(result.nodes)}."
             )
-            return scores._replace(found_on_page=page)
-        return None
+
+        scores = highest_scores(result.nodes)
+        logger.info(
+            f"Bewertung fuer {finding_mrn} "
+            f"({result.nodes[0].get('__typename', 'Unknown')}, "
+            f"{result.total_count} Assets) -> CVSS "
+            f"{scores.cvss_score or '-'} ({scores.cvss_rating or '-'}), "
+            f"Risk {scores.risk_score or '-'} ({scores.risk_rating or '-'})"
+        )
+        return scores

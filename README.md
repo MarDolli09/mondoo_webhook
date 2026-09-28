@@ -1,8 +1,8 @@
 # Mondoo → ServiceNow Webhook
 
-Nimmt Case-Ereignisse aus Mondoo entgegen, reichert sie um CVSS-Werte aus der
-Mondoo GraphQL-API an und legt dazu Requested Items (RITM) über den
-ServiceNow Service Catalog an oder pflegt bestehende.
+Nimmt Case-Ereignisse aus Mondoo entgegen, reichert sie um CVSS- und
+Risk-Werte aus der Mondoo GraphQL-API an und legt dazu Requested Items (RITM)
+über den ServiceNow Service Catalog an oder pflegt bestehende.
 
 ## Ablauf
 
@@ -12,9 +12,11 @@ ServiceNow Service Catalog an oder pflegt bestehende.
    höchstens 5 Minuten Zeitabweichung). Jeder Fehler ergibt 401 ohne Begründung;
    der Grund steht im Log.
 2. `MondooWebhookEvent` liest den Payload (mit oder ohne `body`-Hülle).
-3. `CaseParser` bestimmt den Finding-Typ, sucht CVSS-Details (nur
-   Vulnerabilities und Advisories) und priorisiert:
-   CVSS-Rating → Mondoo Risk Rating → Schweregrad-Tag im Titel → Default.
+3. `CaseParser` bestimmt den Finding-Typ, fragt die Bewertung des Findings
+   über `findings(filter: {mrn})` im Scope des Space ab (ein Request je
+   Finding, ein Knoten je betroffenem Asset, es gilt das höchste Risiko) und
+   priorisiert: CVSS-Rating → Mondoo Risk Rating → Schweregrad-Tag im Titel →
+   Default.
 4. `ServiceNowClient` sucht das RITM über `correlation_id` (= Case-MRN) und
    * bestellt ein neues Katalogformular, wenn keines existiert,
    * aktualisiert bzw. schließt ein offenes RITM (Close → State 3, Delete → 7),
@@ -33,8 +35,8 @@ Katalogformular „Mondoo Vulnerability“ (`order_now`), Reihenfolge wie im For
 |---|---|---|
 | Mondoo Title | `mondoo_title` | `Mondoo - <Titel ohne Schweregrad-Tag>` |
 | CVE | `cve` | CVE aus dem Titel, sonst ` / ` |
-| CVSS Score / CVSS Risk Rating | `cvss_score` / `cvss_risk_rating` | nur aus dem CVSS-Wert des Findings (Skala 0–10), sonst leer |
-| Mondoo Risk Rating / Score | `mondoo_risk_rating` / `mondoo_risk_score` | aus der AI-Summary, sonst aus dem Risk Score des Findings (Skala 0–100) |
+| CVSS Score / CVSS Risk Rating | `cvss_score` / `cvss_risk_rating` | aus `cvss.value`/`cvss.rating` des Findings; die API liefert 0–100 (98 = 9.8), 0 bedeutet kein CVSS |
+| Mondoo Risk Rating / Score | `mondoo_risk_rating` / `mondoo_risk_score` | aus der AI-Summary, sonst aus `riskValue`/`rating` des Findings (Skala 0–100) |
 | Urgency / Impact | `urgency` / `impact` | `1` (Critical) bis `4` (Low) |
 | Mondoo Space | `mondoo_space` | Anzeigename laut `CATEGORY_MAP` |
 | Finding type | `finding_type` | `vulnerability`, `advisories`, `end-of-life`, `misconfiguration`, `other` |
@@ -53,8 +55,8 @@ bei ermittelter Priorität `urgency`/`impact` und schließen bei Close/Delete.
 
 ```
 app/api        HTTP-Endpunkt, Lifespan, Abhängigkeiten, Telemetrie
-app/services   mondoo (CVSS-Suche) · parsing (CaseParser) · servicenow (RITM)
-app/domain     Fachregeln ohne I/O, Schnittstellen CvssLookup / TicketSynchronizer
+app/services   mondoo (Findings-Abfrage) · parsing (CaseParser) · servicenow (RITM)
+app/domain     Fachregeln ohne I/O, Schnittstellen FindingScoresLookup / TicketSynchronizer
 app/models     Eingangsmodell (Mondoo) und NormalizedCase
 app/core       Konfiguration, Stammdaten, Logging, Ausnahmen
 ```

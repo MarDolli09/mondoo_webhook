@@ -69,7 +69,7 @@ class CaseParser:
         space_id = extract_space_id(case.owner_mrn)
 
         event_type = _determine_event_type(event.raw_type, case.status)
-        scores = await self._resolve_scores(case, space_id, profile)
+        scores = await self._resolve_scores(case, space_id)
         risk_rating, risk_score = _resolve_mondoo_risk(description, scores)
         priority = _determine_priority(case.title, scores.cvss_rating, risk_rating)
 
@@ -100,7 +100,6 @@ class CaseParser:
             assets_count=assets_count,
             cvss_score=scores.cvss_score or "",
             cvss_rating=scores.cvss_rating or "",
-            found_on_page=scores.found_on_page,
             risk_rating=risk_rating or "",
             risk_score=risk_score or "",
             priority_source=priority.source,
@@ -119,18 +118,17 @@ class CaseParser:
         return normalized
 
     async def _resolve_scores(
-        self,
-        case: MondooCase,
-        space_id: Optional[str],
-        profile: FindingTypeProfile,
+        self, case: MondooCase, space_id: Optional[str]
     ) -> FindingScores:
-        if not profile.resolves_scores:
-            return NO_FINDING_SCORES
+        """Bewertung des ersten Findings, zu dem Mondoo Werte liefert.
 
+        Gefragt wird im Scope des Space, nicht je Asset: Die Abfrage liefert
+        dann alle betroffenen Assets des Findings auf einmal.
+        """
         for ref in _unique_finding_refs(case.finding_refs):
             scores = await self._scores_lookup.fetch_finding_scores(
                 finding_mrn=ref.finding_mrn,
-                scope_mrn=ref.scope_mrn or case.owner_mrn,
+                scope_mrn=case.owner_mrn,
                 space_id=space_id or "",
             )
             if any(
@@ -162,7 +160,7 @@ def _determine_event_type(raw_type: str, case_status: str) -> MondooEventType:
 
 
 # ---------------------------------------------------------------------- #
-# CVSS
+# Findings
 # ---------------------------------------------------------------------- #
 
 
@@ -175,7 +173,7 @@ def _unique_finding_refs(refs: Sequence[FindingRef]) -> list[FindingRef]:
             continue
         seen.add(ref.finding_mrn)
         unique.append(ref)
-        if len(unique) >= settings.CVSS_MAX_FINDING_ATTEMPTS:
+        if len(unique) >= settings.MONDOO_MAX_FINDING_LOOKUPS:
             break
 
     if len(refs) > len(unique):

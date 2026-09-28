@@ -18,17 +18,20 @@ from tests.fakes import (
     signed_delivery,
 )
 
-CVSS_NODE = {
+# Knoten wie in der Antwort der gefilterten Findings-Abfrage: CVSS auf 0-100
+CVE_NODE = {
     "__typename": "CveFinding",
     "mrn": "//vadvisor.api.mondoo.app/cves/CVE-2024-0056",
-    "cveCvss": {"value": 8.1, "rating": "HIGH"},
+    "riskValue": 72,
+    "rating": "HIGH",
+    "cvss": {"value": 81, "rating": "HIGH"},
 }
 from tests.test_mapping import FORM_VARIABLES  # noqa: E402
 
 
 class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
     async def test_created_vulnerability_orders_ritm(self) -> None:
-        backends = FakeBackends(cvss_nodes=[CVSS_NODE])
+        backends = FakeBackends(finding_nodes=[CVE_NODE])
         (response,) = await post_webhooks(
             backends, [load_fixture("case_created_vulnerability.json")]
         )
@@ -68,7 +71,15 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(patch.body["state"], "3")
         self.assertTrue(patch.body["work_notes"].endswith("| Betroffene Assets: 5"))
         self.assertNotIn("assignment_group", patch.body)
-        self.assertEqual([r for r in backends.requests if r.service == "mondoo"], [])
+        # Auch Fehlkonfigurationen werden abgefragt, gefiltert auf die Finding-MRN
+        (lookup,) = [r for r in backends.requests if r.service == "mondoo"]
+        self.assertEqual(
+            lookup.body["variables"]["findingMrn"],
+            "//policy.api.mondoo.app/queries/cis-microsoft-azure-foundations--8.3.2",
+        )
+        self.assertEqual(
+            lookup.body["variables"]["scopeMrn"], payload["body"]["case"]["ownerMrn"]
+        )
 
     async def test_end_of_life_is_reported_as_own_type(self) -> None:
         payload = load_fixture("case_created_vulnerability.json")
@@ -97,7 +108,7 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
         first = load_fixture("case_created_vulnerability.json")
         second = copy.deepcopy(first)
         second["body"]["case"]["mrn"] += "-2"
-        backends = FakeBackends(cvss_nodes=[CVSS_NODE])
+        backends = FakeBackends(finding_nodes=[CVE_NODE])
 
         responses = await post_webhooks(backends, [first, second])
 
@@ -225,7 +236,7 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn('"number_of_affected_assets": "4"', order_log)
 
     async def test_no_session_cookies_are_sent_to_servicenow(self) -> None:
-        backends = FakeBackends(cvss_nodes=[CVSS_NODE])
+        backends = FakeBackends(finding_nodes=[CVE_NODE])
 
         (response,) = await post_webhooks(
             backends, [load_fixture("case_created_vulnerability.json")]

@@ -59,27 +59,49 @@ app/core       Konfiguration, Stammdaten, Logging, Ausnahmen, Signaturprüfung
 ## 3. Active Task & Current State
 
 **Funktionsfähig:** Ende-zu-Ende gegen `bmsptest` mit `SNOW_AUTH_MODE=basic`.
-Tickets werden angelegt, aktualisiert und geschlossen. 49 Tests, ruff und mypy
+Tickets werden angelegt, aktualisiert und geschlossen. 50 Tests, ruff und mypy
 sind grün.
 
-**Zuletzt geändert** (Commit `4e19628`, noch **nicht deployt**): Trennung von
-CVSS und Mondoo Risk Score.
+**Zuletzt geändert** (Commit `4e19628` und die nachfolgende Umstellung auf die
+gefilterte Abfrage, beides noch **nicht deployt**):
 
 - `app/domain/scores.py` (ersetzt `cvss.py`): `FindingScores` mit vier Werten,
-  `normalize_cvss_score` (0–10) und `normalize_risk_score` (0–100).
-- `app/services/mondoo/findings.py`: `extract_finding_scores` liest CVSS nur aus
-  dem CVSS-Objekt bzw. `baseValue`/`baseRating`, Risk aus `riskValue`/`riskScore`
-  und `rating`. Vorher wurde ein fehlendes CVSS durch den Risk Score ersetzt und
-  dieser durch zehn geteilt (Risk 89 erschien als „CVSS 8.9").
+  `normalize_cvss_score` (Eingabe 0–100, Ausgabe 0–10) und
+  `normalize_risk_score` (0–100). Vorher wurde ein fehlendes CVSS durch den Risk
+  Score ersetzt (Risk 89 erschien als „CVSS 8.9").
+- `app/services/mondoo/queries.py`: eine Abfrage
+  `findings(scopeMrn, first, filter: {mrn})` statt der paginierten Suche über
+  alle Findings des Scope. Ein Request je Finding statt bis zu 50 Seiten.
+- `app/services/mondoo/api.py`: `fetch_finding_nodes` liefert die Knoten und
+  `totalCount` statt `FindingsPage` mit Cursor.
+- `app/services/mondoo/client.py`: kein Seitendurchlauf, kein Zeitbudget; die
+  Knoten (einer je betroffenem Asset) werden über `highest_scores` zum höchsten
+  Risiko verdichtet.
+- `app/services/mondoo/findings.py`: CVSS ausschließlich aus `cvss.value` /
+  `cvss.rating`, Risk aus `riskValue`/`rating`. `baseValue` bleibt ungenutzt, es
+  liegt auf der Risk-Skala (CheckFinding: 100).
 - `app/services/parsing/case_parser.py`: Risk-Werte zuerst aus der AI-Summary,
-  sonst aus der API. Priorisierung unverändert: CVSS-Rating, dann Risk Rating,
-  dann Titel-Präfix, dann Default.
-- `app/models/case.py`, `app/api/telemetry.py`: Feld `cvss_found_on_page` heißt
-  jetzt `found_on_page`.
+  sonst aus der API; gefragt wird im Scope des Space (`ownerMrn`), nicht je
+  Asset. Alle Finding-Typen werden abgefragt, auch Fehlkonfigurationen.
+- Entfallen: `MONDOO_GRAPHQL_MAX_PAGES`, `CVSS_SEARCH_BUDGET_SECONDS`,
+  `CVSS_SEARCH_LOG_INTERVAL`, `CVSS_MAX_FINDING_ATTEMPTS` (ersetzt durch
+  `MONDOO_MAX_FINDING_LOOKUPS`, Standard 5), `PaginationLimitExceededError`,
+  `SearchBudgetExceededError`, `CVSS_RATING_THRESHOLDS`,
+  `calculate_rating_from_score`, `FindingTypeProfile.resolves_scores`, das Feld
+  `found_on_page`.
 
-**Zuletzt geprüft:** Die Introspektion der Mondoo-API ergab, dass `findings`
-einen `filter: FindingsFilter` mit `mrn`/`mrns` akzeptiert. Ein Testskript zur
-Bestätigung liegt bereit (siehe Abschnitt 6).
+**Zuletzt geprüft** (gefilterte Abfrage gegen die echte API, Scope = Space-MRN):
+
+| Finding | `totalCount` | `riskValue` / `rating` | `cvss` |
+|---|---|---|---|
+| `//vadvisor.api.mondoo.app/cves/CVE-2026-23450` | 6 | 97 / `CRITICAL` | `{value: 98, rating: CRITICAL}` |
+| `//vadvisor.api.mondoo.app/advisories/MONDOO-EOL-DOTNET-8` | 3 | 89 / `HIGH` | `{value: 0, rating: NONE}` |
+| `//policy.api.mondoo.app/queries/cis-microsoft-azure-foundations--8.3.2` | 5 | 100 / `CRITICAL` | kein Feld (`CheckFinding`) |
+
+Daraus folgt: **CVSS kommt auf der Skala 0–100** (98 entspricht 9.8), `0` heißt
+„kein CVSS", `totalCount` ist die Anzahl betroffener Assets und die API liefert
+je Asset einen Knoten. Die Rating-Stufe für Risk 100 heißt in der API `CRITICAL`,
+nicht „Mission-Critical".
 
 ## 4. Key Files & Code References
 
@@ -101,7 +123,9 @@ Bestätigung liegt bereit (siehe Abschnitt 6).
 | `app/models/mondoo.py` | Eingangsmodell des Webhooks |
 | `app/models/case.py` | `NormalizedCase` als interne Zwischenform |
 | `app/services/parsing/case_parser.py` | Klassifikation, Anreicherung, Normalisierung |
-| `app/services/mondoo/queries.py` | GraphQL-Abfrage (aktuell paginierte Suche) |
+| `app/services/mondoo/queries.py` | GraphQL-Abfrage `findings(filter: {mrn})` |
+| `app/services/mondoo/api.py` | GraphQL-Transport, Union-Fehler der Antwort |
+| `app/services/mondoo/client.py` | Abfrage je Finding, höchstes Risiko über alle Assets |
 | `app/services/mondoo/findings.py` | Auswertung einzelner Finding-Knoten |
 | `app/services/servicenow/mapping.py` | Katalogvariablen und RITM-Felder |
 | `app/services/servicenow/client.py` | Anlegen, Aktualisieren, Schließen |
@@ -127,8 +151,14 @@ Bestätigung liegt bereit (siehe Abschnitt 6).
 - **`mondoo_mrn` ohne „Map to field"**: Die `correlation_id` setzt erst der PATCH
   nach der Bestellung. Schlägt der fehl, entsteht beim nächsten Ereignis ein
   zweites Ticket.
-- **Rating-Stufen:** Mondoo zeigt für Risk 100 „Mission-Critical". Fehlt die
-  Stufe in `PRIORITY_MAP`, greift bei Findings ohne CVSS der Titel-Fallback.
+- **Rating-Stufen:** Die Oberfläche zeigt für Risk 100 „Mission-Critical", die
+  API liefert `CRITICAL`. `PRIORITY_MAP` deckt damit alle beobachteten Stufen ab.
+- **Ein Knoten je Asset:** Die gefilterte Abfrage liefert bis zu
+  `NODES_PER_FINDING` (100) Knoten. Bei mehr betroffenen Assets protokolliert der
+  Client, wie viele bewertet wurden; es gilt das höchste Risiko der ersten Seite.
+- **Scope ist der Space**, nicht das einzelne Asset. Der Wert entspricht damit
+  dem, was die Mondoo-Oberfläche zum Finding zeigt, kann aber Assets umfassen,
+  die nicht am Case hängen.
 
 **Bewusste Entscheidungen**
 
@@ -144,9 +174,11 @@ Bestätigung liegt bereit (siehe Abschnitt 6).
 - **Referenz-Cache ohne Ablaufzeit.** Der Schlüsselraum ist durch die
   konfigurierten Benutzer begrenzt; Änderungen in ServiceNow wirken erst nach
   einem Neustart.
-- **Fehlkonfigurationen fragen die Mondoo-API nicht ab** (`resolves_scores=False`),
-  weil die heutige Suche zu teuer ist. Mit dem Filter aus Abschnitt 6 entfällt
-  der Grund.
+- **Alle Finding-Typen werden abgefragt.** Mit der gefilterten Abfrage kostet
+  das einen Request, deshalb erhalten auch Fehlkonfigurationen ihr Risk Rating
+  aus der API.
+- **`baseValue`/`baseRating` bleiben ungenutzt.** Sie liegen auf der Risk-Skala;
+  beim `CheckFinding` steht dort 100, was als CVSS 10.0 falsch wäre.
 - **Python 3.9-kompatibel**, obwohl Azure 3.11 fährt, weil die lokale
   Entwicklungsumgebung noch 3.9 nutzt.
 
@@ -163,17 +195,14 @@ Bestätigung liegt bereit (siehe Abschnitt 6).
 
 ## 6. Next Immediate Steps (Checkliste)
 
-- [ ] Commit `4e19628` deployen und im Log prüfen: `Bewertung auf Seite N
-      geladen … -> CVSS 9.8 (CRITICAL), Risk 100 (…)`. Die tatsächliche
-      Rating-Stufe notieren und bei Bedarf in `PRIORITY_MAP` ergänzen.
-- [ ] `filter_test.py` in Kudu SSH ausführen und prüfen, ob
-      `findings(filter: {mrn: …})` das Finding direkt liefert und ob die
-      Space-MRN als Scope genügt.
-- [ ] Bei Erfolg die paginierte Suche durch eine gefilterte Abfrage ersetzen
-      (`queries.py`, `api.py`, `client.py`); `MONDOO_GRAPHQL_MAX_PAGES`,
-      `CVSS_SEARCH_BUDGET_SECONDS`, `CVSS_SEARCH_LOG_INTERVAL` und
-      `CVSS_MAX_FINDING_ATTEMPTS` entfallen, `resolves_scores` für
-      `misconfiguration` aktivieren.
+- [ ] Umstellung deployen und im Log prüfen: `Bewertung fuer //… (CveFinding,
+      6 Assets) -> CVSS 9.8 (CRITICAL), Risk 97 (CRITICAL)`. Für eine
+      Fehlkonfiguration muss jetzt ebenfalls ein Risk-Wert erscheinen.
+- [ ] Nach dem Deployment im Ticket prüfen: `cvss_score`/`cvss_risk_rating` bei
+      CVEs gefüllt, bei End-of-Life leer, `mondoo_risk_score`/`_rating` überall
+      gefüllt.
+- [ ] Optional: `epss { probability }` und `riskFactors` mitabfragen, sobald das
+      Formular Felder dafür hat.
 - [ ] OAuth auf `bmsptest` klären: Eintrag in der Application Registry prüfen
       oder neu anlegen, Werte im Key Vault hinterlegen, dann
       `SNOW_AUTH_MODE=oauth`.
