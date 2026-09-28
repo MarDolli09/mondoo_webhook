@@ -103,6 +103,32 @@ class SettingsStartupTest(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("ohne Pfad wie /oauth_token.do", result.stderr)
 
+    def test_servicenow_settings_are_checked_at_start(self) -> None:
+        invalid = {
+            "SNOW_CATALOG_ITEM_SYS_ID": ("", "sys_id des"),
+            "SNOW_AUTH_MODE": ("kerberos", "SNOW_AUTH_MODE muss"),
+            "SNOW_USER": ("  ", "SNOW_USER darf nicht leer sein"),
+        }
+        for name, (value, expected_hint) in invalid.items():
+            env = {
+                "PATH": os.environ.get("PATH", ""),
+                "PYTHONPATH": str(ROOT),
+                "APP_ENV_FILE": str(ROOT / "tests" / ".env.test"),
+                name: value,
+            }
+            result = subprocess.run(
+                [sys.executable, "-c", "import app.core.config"],
+                cwd=ROOT / "tests",
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            with self.subTest(name):
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(name, result.stderr)
+                self.assertIn(expected_hint, result.stderr)
+
 
 class WebhookSecretNormalizationTest(unittest.TestCase):
     def test_surrounding_whitespace_is_removed(self) -> None:

@@ -24,6 +24,10 @@ UNRESOLVED_KEYVAULT_MARKER = "@Microsoft.KeyVault"
 # Zulaessige Zeichen eines HTTP-Headernamens (RFC 9110, token)
 HEADER_NAME_PATTERN = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+")
 OAUTH_AUTH_MODE = "oauth"
+BASIC_AUTH_MODE = "basic"
+AUTH_MODES = (OAUTH_AUTH_MODE, BASIC_AUTH_MODE)
+# sys_ids in ServiceNow sind 32-stellig hexadezimal
+SYS_ID_PATTERN = re.compile(r"[0-9a-fA-F]{32}")
 
 # APP_ENV_FILE erlaubt Tests und Audits, eine Dummy-Datei statt .env zu laden.
 # hide_input_in_errors: Validierungsfehler beim Start duerfen keine Werte (Secrets)
@@ -66,7 +70,7 @@ class Settings(BaseSettings):
     @property
     def uses_oauth(self) -> bool:
         """True, wenn ServiceNow per OAuth statt Basic Auth angesprochen wird."""
-        return self.SNOW_AUTH_MODE.lower() == OAUTH_AUTH_MODE
+        return self.SNOW_AUTH_MODE == OAUTH_AUTH_MODE
 
     @property
     def snow_base_url(self) -> str:
@@ -119,6 +123,33 @@ class Settings(BaseSettings):
                 "https://<instanz>.service-now.com - ohne Pfad wie /oauth_token.do."
             )
         return value.strip()
+
+    @field_validator("SNOW_AUTH_MODE")
+    @classmethod
+    def _require_known_auth_mode(cls, value: str) -> str:
+        cleaned = value.strip().lower()
+        if cleaned not in AUTH_MODES:
+            raise ValueError(f"SNOW_AUTH_MODE muss {' oder '.join(AUTH_MODES)} sein.")
+        return cleaned
+
+    @field_validator("SNOW_USER")
+    @classmethod
+    def _require_user(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("SNOW_USER darf nicht leer sein.")
+        return value.strip()
+
+    @field_validator("SNOW_CATALOG_ITEM_SYS_ID")
+    @classmethod
+    def _require_catalog_item_sys_id(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not SYS_ID_PATTERN.fullmatch(cleaned):
+            raise ValueError(
+                "SNOW_CATALOG_ITEM_SYS_ID muss die 32-stellige sys_id des "
+                "Katalogformulars der angesprochenen Instanz sein "
+                "(hexadezimal, ohne Bindestriche)."
+            )
+        return cleaned
 
     @field_validator("MONDOO_WEBHOOK_AUTH_HEADER")
     @classmethod
