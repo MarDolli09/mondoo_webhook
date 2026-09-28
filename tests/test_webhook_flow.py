@@ -221,6 +221,18 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn('"mondoo_title": "Mondoo - Mitigate vulnerability', order_log)
         self.assertIn('"number_of_affected_assets": "4"', order_log)
 
+    async def test_no_session_cookies_are_sent_to_servicenow(self) -> None:
+        backends = FakeBackends(cvss_nodes=[CVSS_NODE])
+
+        (response,) = await post_webhooks(
+            backends, [load_fixture("case_created_vulnerability.json")]
+        )
+
+        self.assertEqual(response.json()["action"], "created")
+        servicenow = [r for r in backends.requests if r.service == "servicenow"]
+        self.assertGreater(len(servicenow), 1)
+        self.assertEqual([r.cookie for r in servicenow], [None] * len(servicenow))
+
     async def test_authenticated_but_invalid_payloads(self) -> None:
         backends = FakeBackends()
         missing_mrn, not_json = await post_webhooks(

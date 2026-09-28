@@ -26,6 +26,7 @@ from app.services.servicenow.constants import (
     TABLE_REQUEST_ITEM,
     TABLE_USER,
 )
+from app.services.servicenow.http_session import drop_session_cookies
 
 __all__ = ["ServiceNowAPI"]
 
@@ -234,6 +235,7 @@ class ServiceNowAPI:
 
         for attempt in range(1, max_retries + 1):
             headers = await self._auth.headers()
+            drop_session_cookies(self._http_client)
             try:
                 response = await self._http_client.request(
                     method,

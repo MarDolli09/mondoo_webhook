@@ -79,6 +79,7 @@ class RecordedRequest:
     path: str
     params: dict[str, str]
     body: Any
+    cookie: Optional[str] = None
 
 
 @dataclass
@@ -121,10 +122,18 @@ class FakeBackends:
 
         self.requests.append(
             RecordedRequest(
-                "servicenow", request.method, request.url.path, params, body
+                "servicenow",
+                request.method,
+                request.url.path,
+                params,
+                body,
+                cookie=request.headers.get("cookie"),
             )
         )
-        return self._servicenow(request.method, request.url.path, params, body)
+        response = self._servicenow(request.method, request.url.path, params, body)
+        # ServiceNow setzt bei jedem Aufruf ein Sitzungs-Cookie.
+        response.headers["set-cookie"] = "JSESSIONID=ABC123; Path=/; HttpOnly"
+        return response
 
     def _findings_page(self) -> httpx.Response:
         edges = [{"node": node} for node in self.cvss_nodes]

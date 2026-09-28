@@ -13,6 +13,7 @@ from app.services.servicenow.constants import (
     PATH_OAUTH_TOKEN,
     TOKEN_EXPIRY_MARGIN_SECONDS,
 )
+from app.services.servicenow.http_session import drop_session_cookies
 
 __all__ = ["ServiceNowAuth"]
 
@@ -90,6 +91,7 @@ class ServiceNowAuth:
             "username": settings.SNOW_USER,
             "password": settings.SNOW_PASSWORD.get_secret_value(),
         }
+        drop_session_cookies(self._http_client)
         try:
             response = await self._http_client.post(
                 f"{self._base_url}{PATH_OAUTH_TOKEN}",
