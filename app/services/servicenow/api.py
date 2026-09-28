@@ -274,6 +274,10 @@ class ServiceNowAPI:
                 continue
 
             if response.status_code >= 400:
+                logger.error(
+                    f"ServiceNow lehnte {method} {path} ab. Gesendete Header: "
+                    f"{_loggable_headers(response.request.headers)}"
+                )
                 raise ServiceNowAPIError(
                     f"HTTP {response.status_code} bei {method} {path}: "
                     f"{response.text[:ERROR_TEXT_LIMIT]}",
@@ -287,3 +291,11 @@ class ServiceNowAPI:
             f"{method} {path} nach {max_retries} Versuchen fehlgeschlagen "
             f"(zuletzt HTTP {last_status})"
         )
+
+
+def _loggable_headers(headers: httpx.Headers) -> dict[str, str]:
+    """Gesendete Header fuer das Log; Anmeldedaten werden ersetzt."""
+    return {
+        name: ("<gesetzt>" if name.lower() == "authorization" else value)
+        for name, value in headers.items()
+    }

@@ -216,6 +216,9 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
             receiver_logger.disabled = True
 
         self.assertEqual(response.status_code, 502)
+        header_log = next(m for m in captured.output if "Gesendete Header" in m)
+        self.assertIn("'authorization': '<gesetzt>'", header_log)
+        self.assertNotIn("cookie", header_log)
         order_log = next(m for m in captured.output if "order_now abgelehnt" in m)
         self.assertIn('"sysparm_quantity": "1"', order_log)
         self.assertIn('"mondoo_title": "Mondoo - Mitigate vulnerability', order_log)
