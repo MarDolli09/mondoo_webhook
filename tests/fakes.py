@@ -93,6 +93,7 @@ class FakeBackends:
     token_fetches: int = 0
     token_status: int = 200
     lookup_status: int = 200
+    order_status: int = 200
 
     def transport(self) -> httpx.MockTransport:
         """httpx-Transport, der alle Requests an diese Attrappen leitet."""
@@ -159,6 +160,14 @@ class FakeBackends:
                 200, json={"result": [{"sys_id": f"usr-{identifier}"}]}
             )
         if path.endswith("/order_now"):
+            if self.order_status != 200:
+                order_error = {
+                    "error": {
+                        "message": "Security constraints prevent ordering of Item"
+                    },
+                    "status": "failure",
+                }
+                return httpx.Response(self.order_status, json=order_error)
             result = {"request_id": "req-new", "request_number": "REQ0100001"}
             return httpx.Response(200, json={"result": result})
         if method == "PATCH":

@@ -65,6 +65,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 settings.MONDOO_WEBHOOK_TOLERANCE_SECONDS,
             ),
         )
+        _log_effective_configuration()
         yield
     logger.info("Gemeinsamer HTTP-Client erfolgreich geschlossen.")
 
@@ -88,3 +89,20 @@ def get_ticket_synchronizer(
         resources.http_client, resources.servicenow_auth, resources.reference_cache
     )
     return ServiceNowClient(api)
+
+
+def _log_effective_configuration() -> None:
+    """Protokolliert die wirksamen Einstellungen beim Start; ohne Geheimwerte."""
+    requested_for = (
+        "gesetzt" if settings.SNOW_REQUESTED_FOR_SYS_ID else "angemeldeter Benutzer"
+    )
+    logger.info(
+        f"ServiceNow: {settings.snow_base_url}, Auth-Modus "
+        f"'{settings.SNOW_AUTH_MODE}', Benutzer '{settings.SNOW_USER}', "
+        f"Katalog-Item {settings.SNOW_CATALOG_ITEM_SYS_ID}, "
+        f"Angefordert fuer: {requested_for}"
+    )
+    logger.info(
+        f"Mondoo-Webhook: Auth-Header '{settings.MONDOO_WEBHOOK_AUTH_HEADER}', "
+        f"Zeittoleranz {settings.MONDOO_WEBHOOK_TOLERANCE_SECONDS}s"
+    )

@@ -1,6 +1,7 @@
 """REST-Zugriffe auf ServiceNow: Tabellen, Service Catalog und Referenzen."""
 
 import asyncio
+import json
 from typing import Any, Optional
 
 import httpx
@@ -116,11 +117,20 @@ class ServiceNowAPI:
         if requested_for_sys_id:
             body["sysparm_requested_for"] = requested_for_sys_id
 
-        response = await self._request(
-            "POST",
-            PATH_ORDER_NOW.format(item_sys_id=settings.SNOW_CATALOG_ITEM_SYS_ID),
-            json_body=body,
-        )
+        try:
+            response = await self._request(
+                "POST",
+                PATH_ORDER_NOW.format(item_sys_id=settings.SNOW_CATALOG_ITEM_SYS_ID),
+                json_body=body,
+            )
+        except ServiceNowAPIError:
+            # Der Body enthaelt keine Geheimwerte und macht den Fehler
+            # gegenueber ServiceNow nachstellbar.
+            logger.error(
+                f"order_now abgelehnt. Gesendeter Body: "
+                f"{json.dumps(body, ensure_ascii=False)}"
+            )
+            raise
         result = response.get("result") or {}
 
         # Bei aktiviertem Two-Step-Checkout verhaelt sich order_now wie

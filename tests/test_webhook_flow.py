@@ -187,6 +187,40 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
         for secret in ("SNOW_CLIENT_SECRET", "SNOW_PASSWORD"):
             self.assertNotIn(os.environ[secret], token_log)
 
+    async def test_startup_logs_effective_configuration(self) -> None:
+        receiver_logger = logging.getLogger("mondoo-receiver")
+        receiver_logger.disabled = False
+        try:
+            with self.assertLogs(receiver_logger, level="INFO") as captured:
+                await post_webhooks(FakeBackends(), [])
+        finally:
+            receiver_logger.disabled = True
+
+        startup = next(m for m in captured.output if "Auth-Modus" in m)
+        self.assertIn("https://dummy-instance.service-now.com", startup)
+        self.assertIn("'oauth'", startup)
+        self.assertIn("Angefordert fuer: angemeldeter Benutzer", startup)
+        for secret in ("SNOW_PASSWORD", "MONDOO_WEBHOOK_AUTH_HEADER_VALUE"):
+            self.assertNotIn(os.environ[secret], startup)
+
+    async def test_rejected_order_logs_the_sent_body(self) -> None:
+        receiver_logger = logging.getLogger("mondoo-receiver")
+        receiver_logger.disabled = False
+        try:
+            with self.assertLogs(receiver_logger, level="ERROR") as captured:
+                (response,) = await post_webhooks(
+                    FakeBackends(order_status=400),
+                    [load_fixture("case_created_vulnerability.json")],
+                )
+        finally:
+            receiver_logger.disabled = True
+
+        self.assertEqual(response.status_code, 502)
+        order_log = next(m for m in captured.output if "order_now abgelehnt" in m)
+        self.assertIn('"sysparm_quantity": "1"', order_log)
+        self.assertIn('"mondoo_title": "Mondoo - Mitigate vulnerability', order_log)
+        self.assertIn('"number_of_affected_assets": "4"', order_log)
+
     async def test_authenticated_but_invalid_payloads(self) -> None:
         backends = FakeBackends()
         missing_mrn, not_json = await post_webhooks(
