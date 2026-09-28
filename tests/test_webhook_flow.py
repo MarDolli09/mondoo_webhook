@@ -38,13 +38,13 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
         (order,) = backends.find("servicenow", "POST", "/order_now")
         variables = order.body["variables"]
         self.assertEqual(list(variables), FORM_VARIABLES)
-        self.assertEqual(variables["assets_count"], "4")
+        self.assertEqual(variables["number_of_affected_assets"], "4")
         self.assertEqual(variables["urgency"], "2")
         self.assertEqual(
             variables["mondoo_title"],
             "Mondoo - Mitigate vulnerability CVE-2024-0056 on multiple assets",
         )
-        self.assertEqual(variables["cvss_rating"], "HIGH")
+        self.assertEqual(variables["cvss_risk_rating"], "HIGH")
         (patch,) = backends.find("servicenow", "PATCH", "/sc_req_item/")
         self.assertEqual(patch.body["short_description"], variables["mondoo_title"])
         self.assertNotIn("urgency", patch.body)
@@ -53,6 +53,7 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
             patch.body["watch_list"], "usr-lars.siefert@mosca.com,usr-Marius Dollinger"
         )
         self.assertEqual(backends.find("servicenow", "GET", "sys_user_group"), [])
+        self.assertNotIn("sysparm_requested_for", order.body)
 
     async def test_closed_event_closes_open_ritm(self) -> None:
         payload = load_fixture("case_closed_misconfiguration.json")

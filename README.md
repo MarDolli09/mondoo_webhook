@@ -32,15 +32,15 @@ Katalogformular „Mondoo Vulnerability“ (`order_now`), Reihenfolge wie im For
 | Formularfeld | Variable | Wert |
 |---|---|---|
 | Mondoo Title | `mondoo_title` | `Mondoo - <Titel ohne Schweregrad-Tag>` |
-| CVE | `mondoo_cve` | CVE aus dem Titel, sonst ` / ` |
-| CVSS Score / CVSS Risk Rating | `cvss_score` / `cvss_rating` | aus der Mondoo GraphQL-Suche, sonst leer |
-| Mondoo Risk Rating / Score | `risk_rating` / `risk_score` | aus der AI-Summary, sonst leer |
+| CVE | `cve` | CVE aus dem Titel, sonst ` / ` |
+| CVSS Score / CVSS Risk Rating | `cvss_score` / `cvss_risk_rating` | aus der Mondoo GraphQL-Suche, sonst leer |
+| Mondoo Risk Rating / Score | `mondoo_risk_rating` / `mondoo_risk_score` | aus der AI-Summary, sonst leer |
 | Urgency / Impact | `urgency` / `impact` | `1` (Critical) bis `4` (Low) |
 | Mondoo Space | `mondoo_space` | Anzeigename laut `CATEGORY_MAP` |
 | Finding type | `finding_type` | `vulnerability`, `advisories`, `end-of-life`, `misconfiguration`, `other` |
-| Mondoo Ticket URL | `ticket_url` | Link auf den Case in Mondoo |
-| Number of affected assets | `assets_count` | `assetsCount`, sonst Anzahl Assets aus den Refs |
-| Created by | `mondoo_created_by` | Name laut `USER_MAP`, MRN oder `Mondoo-Drift` |
+| Mondoo Ticket URL | `mondoo_ticket_url` | Link auf den Case in Mondoo |
+| Number of affected assets | `number_of_affected_assets` | `assetsCount`, sonst Anzahl Assets aus den Refs |
+| Created by | `created_by` | Name laut `USER_MAP`, MRN oder `Mondoo-Drift` |
 | Mondoo MRN | `mondoo_mrn` | Case-MRN (in ServiceNow per „Map to field“ → `correlation_id`) |
 
 RITM-Felder per PATCH nach der Bestellung: `state` (1), `correlation_id`,

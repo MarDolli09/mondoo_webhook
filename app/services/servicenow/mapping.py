@@ -76,18 +76,18 @@ def build_catalog_variables(case: NormalizedCase) -> dict[str, str]:
     """
     return {
         "mondoo_title": ticket_title(case),
-        "mondoo_cve": case.finding_cve,
+        "cve": case.finding_cve,
         "cvss_score": case.cvss_score,
-        "cvss_rating": case.cvss_rating,
-        "risk_rating": case.risk_rating,
-        "risk_score": case.risk_score,
-        "urgency": case.urgency,
-        "impact": case.impact,
+        "cvss_risk_rating": case.cvss_rating,
+        "mondoo_risk_rating": case.risk_rating,
+        "mondoo_risk_score": case.risk_score,
         "mondoo_space": case.mondoo_space,
         "finding_type": case.finding_type,
-        "ticket_url": case.ticket_url,
-        "assets_count": str(case.assets_count),
-        "mondoo_created_by": creator_display_name(case),
+        "mondoo_ticket_url": case.ticket_url,
+        "number_of_affected_assets": str(case.assets_count),
+        "created_by": creator_display_name(case),
+        "urgency": case.urgency,
+        "impact": case.impact,
         "mondoo_mrn": correlation_id(case),
     }
 

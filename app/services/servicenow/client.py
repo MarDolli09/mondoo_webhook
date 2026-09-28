@@ -66,12 +66,11 @@ class ServiceNowClient(TicketSynchronizer):
     # ------------------------------------------------------------------ #
 
     async def _create(self, case: NormalizedCase) -> dict[str, Any]:
-        requested_for = (
-            settings.SNOW_REQUESTED_FOR_SYS_ID
-            or await self._api.resolve_user_sys_id(SNOW_INTEGRATION_USER)
-        )
+        # Ohne sysparm_requested_for traegt ServiceNow den angemeldeten Benutzer
+        # ein. Im Namen eines anderen zu bestellen ist dort rollenpflichtig.
         request_sys_id = await self._api.order_catalog_item(
-            build_catalog_variables(case), requested_for_sys_id=requested_for
+            build_catalog_variables(case),
+            requested_for_sys_id=settings.SNOW_REQUESTED_FOR_SYS_ID or None,
         )
         ritm = await self._api.resolve_request_item(request_sys_id)
         ritm_sys_id = ritm["sys_id"]

@@ -12,18 +12,18 @@ ALEXANDER = "//captain.api.mondoo.app/users/2nZF38ZPg7vhizUrgIHqRF1aUwu"
 # Variablen des ServiceNow-Formulars "Mondoo Vulnerability" in Formularreihenfolge
 FORM_VARIABLES = [
     "mondoo_title",
-    "mondoo_cve",
+    "cve",
     "cvss_score",
-    "cvss_rating",
-    "risk_rating",
-    "risk_score",
-    "urgency",
-    "impact",
+    "cvss_risk_rating",
+    "mondoo_risk_rating",
+    "mondoo_risk_score",
     "mondoo_space",
     "finding_type",
-    "ticket_url",
-    "assets_count",
-    "mondoo_created_by",
+    "mondoo_ticket_url",
+    "number_of_affected_assets",
+    "created_by",
+    "urgency",
+    "impact",
     "mondoo_mrn",
 ]
 
@@ -68,9 +68,9 @@ class CatalogVariablesTest(unittest.TestCase):
     def test_variables_match_servicenow_form(self) -> None:
         variables = mapping.build_catalog_variables(make_case())
         self.assertEqual(list(variables), FORM_VARIABLES)
-        self.assertEqual(variables["assets_count"], "4")
+        self.assertEqual(variables["number_of_affected_assets"], "4")
         self.assertEqual((variables["urgency"], variables["impact"]), ("1", "1"))
-        self.assertEqual(variables["mondoo_created_by"], "Alexander Haller")
+        self.assertEqual(variables["created_by"], "Alexander Haller")
         self.assertTrue(variables["mondoo_title"].startswith("Mondoo - "))
 
 
