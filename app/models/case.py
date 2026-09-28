@@ -32,7 +32,8 @@ class NormalizedCase(BaseModel):
     # CVSS: nur bei Vulnerabilities und Advisories belegt
     cvss_score: str = ""
     cvss_rating: str = ""
-    cvss_found_on_page: Optional[int] = None
+    # Seite der Mondoo-Suche, auf der das Finding gefunden wurde
+    found_on_page: Optional[int] = None
 
     # Mondoo Risk Rating (CRITICAL/HIGH/MEDIUM/LOW) und Score 0-100. Bewusst
     # getrennt von CVSS: Fehlkonfigurationen haben kein CVSS, aber ein Risiko.

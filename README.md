@@ -33,8 +33,8 @@ Katalogformular „Mondoo Vulnerability“ (`order_now`), Reihenfolge wie im For
 |---|---|---|
 | Mondoo Title | `mondoo_title` | `Mondoo - <Titel ohne Schweregrad-Tag>` |
 | CVE | `cve` | CVE aus dem Titel, sonst ` / ` |
-| CVSS Score / CVSS Risk Rating | `cvss_score` / `cvss_risk_rating` | aus der Mondoo GraphQL-Suche, sonst leer |
-| Mondoo Risk Rating / Score | `mondoo_risk_rating` / `mondoo_risk_score` | aus der AI-Summary, sonst leer |
+| CVSS Score / CVSS Risk Rating | `cvss_score` / `cvss_risk_rating` | nur aus dem CVSS-Wert des Findings (Skala 0–10), sonst leer |
+| Mondoo Risk Rating / Score | `mondoo_risk_rating` / `mondoo_risk_score` | aus der AI-Summary, sonst aus dem Risk Score des Findings (Skala 0–100) |
 | Urgency / Impact | `urgency` / `impact` | `1` (Critical) bis `4` (Low) |
 | Mondoo Space | `mondoo_space` | Anzeigename laut `CATEGORY_MAP` |
 | Finding type | `finding_type` | `vulnerability`, `advisories`, `end-of-life`, `misconfiguration`, `other` |

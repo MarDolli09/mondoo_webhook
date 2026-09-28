@@ -78,7 +78,7 @@ def build_telemetry_record(
         "cvss_rating": case.cvss_rating or None,
         "risk_rating": case.risk_rating or None,
         "risk_score": case.risk_score or None,
-        "cvss_found_on_page": case.cvss_found_on_page,
+        "found_on_page": case.found_on_page,
         "assets_reported": event.case.assets_count,
         "is_automated": case.is_automated,
         "parse_duration_ms": parse_ms,

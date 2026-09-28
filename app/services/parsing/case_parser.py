@@ -12,7 +12,6 @@ from app.domain.case_text import (
     extract_ticket_url,
     sanitize_url,
 )
-from app.domain.cvss import NO_CVSS_DETAILS, CvssDetails
 from app.domain.finding_types import (
     FindingTypeProfile,
     classify_finding_type,
@@ -24,8 +23,9 @@ from app.domain.identifiers import (
     extract_space_id,
     is_automated_identity,
 )
-from app.domain.ports import CvssLookup
+from app.domain.ports import FindingScoresLookup
 from app.domain.priority import Priority, determine_priority
+from app.domain.scores import NO_FINDING_SCORES, FindingScores
 from app.models.case import NormalizedCase
 from app.models.mondoo import (
     CASE_STATUS_CLOSED,
@@ -44,12 +44,12 @@ LOG_BANNER_WIDTH = 16
 class CaseParser:
     """Klassifiziert, reichert an und normalisiert Mondoo-Cases.
 
-    Einziger Zustand ist die CVSS-Quelle; alle uebrigen Schritte sind reine
+    Einziger Zustand ist die Bewertungsquelle; alle uebrigen Schritte sind reine
     Funktionen dieses Moduls bzw. von ``app.domain``.
     """
 
-    def __init__(self, cvss_lookup: CvssLookup) -> None:
-        self._cvss_lookup = cvss_lookup
+    def __init__(self, scores_lookup: FindingScoresLookup) -> None:
+        self._scores_lookup = scores_lookup
 
     @staticmethod
     def classify_finding_type(event: MondooWebhookEvent) -> str:
@@ -69,9 +69,9 @@ class CaseParser:
         space_id = extract_space_id(case.owner_mrn)
 
         event_type = _determine_event_type(event.raw_type, case.status)
-        cvss = await self._resolve_cvss(case, space_id, profile)
-        risk_rating, risk_score = _read_mondoo_risk(description, cvss.rating)
-        priority = _determine_priority(case.title, cvss.rating, risk_rating)
+        scores = await self._resolve_scores(case, space_id, profile)
+        risk_rating, risk_score = _resolve_mondoo_risk(description, scores)
+        priority = _determine_priority(case.title, scores.cvss_rating, risk_rating)
 
         assets_count = case.assets_count or count_referenced_assets(
             ref.scope_mrn for ref in case.finding_refs
@@ -98,9 +98,9 @@ class CaseParser:
             ),
             finding_cve=extract_cve(case.title, master_data.DEFAULT_CVE),
             assets_count=assets_count,
-            cvss_score=cvss.score or "",
-            cvss_rating=cvss.rating or "",
-            cvss_found_on_page=cvss.found_on_page,
+            cvss_score=scores.cvss_score or "",
+            cvss_rating=scores.cvss_rating or "",
+            found_on_page=scores.found_on_page,
             risk_rating=risk_rating or "",
             risk_score=risk_score or "",
             priority_source=priority.source,
@@ -118,24 +118,31 @@ class CaseParser:
         _log_normalized_case(normalized, profile, description)
         return normalized
 
-    async def _resolve_cvss(
+    async def _resolve_scores(
         self,
         case: MondooCase,
         space_id: Optional[str],
         profile: FindingTypeProfile,
-    ) -> CvssDetails:
-        if not profile.resolves_cvss:
-            return NO_CVSS_DETAILS
+    ) -> FindingScores:
+        if not profile.resolves_scores:
+            return NO_FINDING_SCORES
 
         for ref in _unique_finding_refs(case.finding_refs):
-            details = await self._cvss_lookup.fetch_cvss_details(
+            scores = await self._scores_lookup.fetch_finding_scores(
                 finding_mrn=ref.finding_mrn,
                 scope_mrn=ref.scope_mrn or case.owner_mrn,
                 space_id=space_id or "",
             )
-            if details.score or details.rating:
-                return details
-        return NO_CVSS_DETAILS
+            if any(
+                (
+                    scores.cvss_score,
+                    scores.cvss_rating,
+                    scores.risk_score,
+                    scores.risk_rating,
+                )
+            ):
+                return scores
+        return NO_FINDING_SCORES
 
 
 # ---------------------------------------------------------------------- #
@@ -183,21 +190,35 @@ def _unique_finding_refs(refs: Sequence[FindingRef]) -> list[FindingRef]:
 # ---------------------------------------------------------------------- #
 
 
-def _read_mondoo_risk(
-    description: str, cvss_rating: Optional[str]
+def _resolve_mondoo_risk(
+    description: str, scores: FindingScores
 ) -> tuple[Optional[str], Optional[str]]:
+    """Mondoo Risk Rating und Score, bevorzugt aus dem Befundtext des Case.
+
+    Der Befundtext nennt das Gesamtrisiko des Case. Fehlt es dort, gilt der
+    Wert des gefundenen Findings aus der Mondoo-API.
+    """
     risk_rating, risk_score = extract_risk_from_summary(description)
     if risk_rating:
         logger.info(
             f"Mondoo Risk Rating aus Befundtext gelesen: "
             f"{risk_rating} ({risk_score or '-'}/100)"
         )
-    elif not cvss_rating:
+        return risk_rating, risk_score
+
+    if scores.risk_rating or scores.risk_score:
+        logger.info(
+            f"Mondoo Risk Rating aus der Mondoo-API: "
+            f"{scores.risk_rating or '-'} ({scores.risk_score or '-'}/100)"
+        )
+        return scores.risk_rating, scores.risk_score
+
+    if not scores.cvss_rating:
         logger.warning(
             "Weder CVSS-Rating noch Mondoo Risk Rating ermittelbar. "
             "Priorisierung faellt auf Titel-Praefix bzw. Default zurueck."
         )
-    return risk_rating, risk_score
+    return None, None
 
 
 def _determine_priority(

@@ -3,23 +3,23 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from app.domain.cvss import CvssDetails
+from app.domain.scores import FindingScores
 from app.models.case import NormalizedCase
 
-__all__ = ["CvssLookup", "TicketSynchronizer"]
+__all__ = ["FindingScoresLookup", "TicketSynchronizer"]
 
 
-class CvssLookup(ABC):
-    """Quelle fuer CVSS-Details zu einem Finding."""
+class FindingScoresLookup(ABC):
+    """Quelle fuer die Bewertungen eines Findings."""
 
     @abstractmethod
-    async def fetch_cvss_details(
+    async def fetch_finding_scores(
         self, finding_mrn: str, scope_mrn: str = "", space_id: str = ""
-    ) -> CvssDetails:
-        """Sucht das Finding im Scope und liefert Score, Rating und Fundseite.
+    ) -> FindingScores:
+        """Sucht das Finding im Scope und liefert CVSS, Risk und Fundseite.
 
         Wird nichts gefunden oder schlaegt die Suche fehl, ist das Ergebnis
-        ``NO_CVSS_DETAILS``; die Anreicherung ist optional.
+        ``NO_FINDING_SCORES``; die Anreicherung ist optional.
         """
 
 

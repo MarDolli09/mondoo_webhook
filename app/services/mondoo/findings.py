@@ -4,9 +4,14 @@ import re
 from collections.abc import Mapping
 from typing import Any, Optional
 
-from app.domain.cvss import calculate_rating_from_score, normalize_cvss_score
+from app.domain.scores import (
+    FindingScores,
+    calculate_rating_from_score,
+    normalize_cvss_score,
+    normalize_risk_score,
+)
 
-__all__ = ["extract_score_and_rating", "node_matches", "search_key"]
+__all__ = ["extract_finding_scores", "node_matches", "search_key"]
 
 CVE_IN_MRN_PATTERN = re.compile(r"CVE-\d{4}-\d+", re.IGNORECASE)
 
@@ -17,12 +22,14 @@ TITLE_FIELDS = ("cveTitle", "advTitle", "pkgTitle", "chkTitle", "genTitle")
 # Fehlkonfigurationen tragen kein CVSS, sondern nur ein Risk Rating.
 CVSS_FIELDS = ("cveCvss", "advCvss", "pkgCvss")
 
-# Numerische Ersatzwerte, falls kein CVSS-Wert vorliegt oder er null ist
-SCORE_FALLBACK_FIELDS = ("riskValue", "riskScore", "baseValue", "baseScore")
+# CVSS-Basiswerte, falls das CVSS-Objekt fehlt oder leer ist
+CVSS_FALLBACK_FIELDS = ("baseValue", "baseScore")
+
+# Kontextbezogener Mondoo Risk Score (0-100)
+RISK_SCORE_FIELDS = ("riskValue", "riskScore")
 
 # Ratings, die Mondoo fuer "kein Wert" verwendet
 EMPTY_RATINGS = frozenset({"NONE", "NONE - EOL"})
-ZERO_SCORES = (0, 0.0, "0", "0.0")
 
 
 def search_key(finding_mrn: str) -> str:
@@ -47,24 +54,30 @@ def node_matches(node: Mapping[str, Any], *, key: str, finding_mrn: str) -> bool
     )
 
 
-def extract_score_and_rating(
+def extract_finding_scores(
     node: Mapping[str, Any], thresholds: Mapping[str, float]
-) -> tuple[Optional[str], Optional[str]]:
-    """Score (Text) und Rating eines Knotens; das Rating notfalls aus dem Score."""
-    cvss_obj = None
-    for field in CVSS_FIELDS:
-        candidate = node.get(field)
-        if isinstance(candidate, dict):
-            cvss_obj = candidate
-            break
+) -> FindingScores:
+    """CVSS-Wert und Mondoo Risk Score eines Knotens, strikt getrennt.
 
-    rating = _raw_rating(node, cvss_obj)
-    score_value, score_text = normalize_cvss_score(_raw_score(node, cvss_obj))
+    Fehlt das CVSS-Objekt, bleiben die CVSS-Felder leer; der Risk Score tritt
+    nicht an seine Stelle. Das CVSS-Rating wird notfalls aus dem CVSS-Wert
+    abgeleitet.
+    """
+    cvss_object = _first_mapping(node, CVSS_FIELDS)
+    cvss_value, cvss_score = normalize_cvss_score(_cvss_raw_value(node, cvss_object))
+    cvss_rating = _clean_rating(
+        cvss_object.get("rating") if cvss_object else None
+    ) or _clean_rating(node.get("baseRating"))
+    if cvss_rating is None:
+        cvss_rating = calculate_rating_from_score(cvss_value, thresholds)
 
-    if rating is None and score_value is not None:
-        rating = calculate_rating_from_score(score_value, thresholds)
-
-    return score_text, str(rating).upper() if rating is not None else None
+    return FindingScores(
+        cvss_score=cvss_score,
+        cvss_rating=cvss_rating,
+        risk_score=normalize_risk_score(_first_value(node, RISK_SCORE_FIELDS)),
+        risk_rating=_clean_rating(node.get("rating")),
+        found_on_page=None,
+    )
 
 
 def _node_title(node: Mapping[str, Any]) -> str:
@@ -75,22 +88,32 @@ def _node_title(node: Mapping[str, Any]) -> str:
     return ""
 
 
-def _raw_rating(
-    node: Mapping[str, Any], cvss_obj: Optional[Mapping[str, Any]]
-) -> Optional[str]:
-    rating = cvss_obj.get("rating") if isinstance(cvss_obj, dict) else None
-    if isinstance(rating, str) and rating.upper() in EMPTY_RATINGS:
-        rating = None
-    if rating is None:
-        rating = node.get("rating") or node.get("baseRating")
-    return rating
+def _first_mapping(
+    node: Mapping[str, Any], fields: tuple[str, ...]
+) -> Optional[Mapping[str, Any]]:
+    for field in fields:
+        candidate = node.get(field)
+        if isinstance(candidate, dict):
+            return candidate
+    return None
 
 
-def _raw_score(node: Mapping[str, Any], cvss_obj: Optional[Mapping[str, Any]]) -> Any:
-    value = cvss_obj.get("value") if isinstance(cvss_obj, dict) else None
-    if value is None or value in ZERO_SCORES:
-        for field in SCORE_FALLBACK_FIELDS:
-            fallback = node.get(field)
-            if fallback:
-                return fallback
-    return value
+def _first_value(node: Mapping[str, Any], fields: tuple[str, ...]) -> Any:
+    for field in fields:
+        value = node.get(field)
+        if value:
+            return value
+    return None
+
+
+def _cvss_raw_value(
+    node: Mapping[str, Any], cvss_object: Optional[Mapping[str, Any]]
+) -> Any:
+    value = cvss_object.get("value") if cvss_object else None
+    return value if value else _first_value(node, CVSS_FALLBACK_FIELDS)
+
+
+def _clean_rating(rating: Any) -> Optional[str]:
+    if not isinstance(rating, str) or rating.upper() in EMPTY_RATINGS:
+        return None
+    return rating.upper()
