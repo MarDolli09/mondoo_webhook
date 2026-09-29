@@ -1,8 +1,8 @@
 # Project Context Handover
 
-Stand: 29.09.2026, Commit `287ef41`. Der Fix für die von Mondoo abgelehnte
-Abfrage (Abschnitt 3) liegt **uncommittet** in der Arbeitskopie, gegen die echte
-API geprüft, **Deployment noch offen**.
+Stand: 29.09.2026, Commit `7e4b3c5`. Der Fix für die von Mondoo abgelehnte
+Abfrage (Abschnitt 3) ist **deployt und für alle drei Finding-Typen geprüft**
+(CVE, Fehlkonfiguration, End-of-Life).
 
 ## 1. Executive Summary & Project Goal
 
@@ -22,9 +22,9 @@ Ziel des aktuellen Arbeitspakets: Die Kette läuft seit dem 28.09. vollständig
 gegen die Testinstanz `bmsptest`. Die gefilterte GraphQL-Abfrage je Finding ist
 seit dem 29.09. deployt, wurde aber am selben Tag von Mondoo mit HTTP 422
 abgelehnt (Schemaänderung, Abschnitt 3); Tickets entstanden ohne CVSS/Risk. Der
-Fix ist fertig und geprüft, aber noch nicht committet und deployt. Danach offen:
-Umstellung auf OAuth, Livegang gegen `bmsp` und die weitere Ablösung von
-Textparsing und Stammdaten durch die API (siehe Abschnitte 5 und 6).
+Fix ist seit dem 29.09. deployt. Offen sind die Umstellung auf OAuth, der
+Livegang gegen `bmsp` und die weitere Ablösung von Textparsing und Stammdaten
+durch die API (siehe Abschnitte 5 und 6).
 
 ## 2. Tech Stack & Architecture Decisions
 
@@ -80,7 +80,7 @@ Am 28.09. lief dieselbe Abfrage noch, das Schema hat sich also über Nacht
 geändert. Die Anreicherung ist optional, deshalb entstanden die Tickets trotzdem,
 nur ohne Werte.
 
-**Fix (uncommittet, in Kudu gegen die echte API geprüft):**
+**Fix (Commit `7e4b3c5`, deployt 29.09.):**
 
 - `app/services/mondoo/queries.py`: `cvss` je Typ unter eigenem Alias
   (`cveCvss`, `advisoryCvss`, `packageCvss`; Konstante `CVSS_FIELDS`).
@@ -96,6 +96,17 @@ nur ohne Werte.
   die Dauer, gibt bei HTTP-Fehlern den Antwortrumpf aus; Abfrage mit Aliasen.
 - Tests: Regressionstest „`cvss` nur mit Alias", Ende-zu-Ende-Test für 422
   (Ticket entsteht, Grund im Log), Test „API vor Text".
+
+**Nach dem Deployment geprüft** (29.09., gegen 09:17):
+
+| RITM | Finding (Typ) | CVSS | Risk | Priorität über |
+|---|---|---|---|---|
+| RITM0043012 | `CVE-2026-53131` (`CveFinding`, API: 6 Assets, Case: 5) | 9.4 (CRITICAL) | 100 (CRITICAL) | `cvss` → 1/1 |
+| RITM0043014 | `cis-microsoft-azure-foundations--6.1.1.4` (`CheckFinding`, 10 Assets) | leer | 100 (CRITICAL) | `mondoo_risk` → 1/1 |
+| RITM0043015 | `MONDOO-EOL-NUMPY-1-26` (`AdvisoryFinding`, 1 Asset) | leer | 100 (CRITICAL) | `mondoo_risk` → 1/1 |
+
+CVSS fehlt bei Fehlkonfiguration und End-of-Life zu Recht, siehe „Bewusste
+Entscheidungen". Die Bewertung dauert 0,4–0,8 s je Webhook.
 
 **Davor geändert** (Commits `4e19628`, `cf166b1` und `a33c94a`, seit 29.09.
 deployt):
@@ -210,7 +221,11 @@ nicht „Mission-Critical".
   Client, wie viele bewertet wurden; es gilt das höchste Risiko der ersten Seite.
 - **Scope ist der Space**, nicht das einzelne Asset. Der Wert entspricht damit
   dem, was die Mondoo-Oberfläche zum Finding zeigt, kann aber Assets umfassen,
-  die nicht am Case hängen.
+  die nicht am Case hängen. Beobachtet am 29.09. bei CVE-2026-53131: Die API
+  meldet 6 Assets, der Case umfasst 5. `number_of_affected_assets` kommt aus
+  dem Case und stimmt; das höchste Risiko kann aber von dem fremden Asset
+  stammen. Möglicher Ausweg: je Knoten die Asset-MRN mit abfragen und auf die
+  `scopeMrn`s des Case filtern (Feldname per Introspektion klären).
 
 **Wo die API weiteres Textparsing und Stammdaten ersetzen könnte**
 
@@ -228,7 +243,7 @@ Ohne Schemaprüfung umsetzbar:
    MRN enthält die Kennung (`/cves/CVE-2024-0056`); ein Titel ohne CVE liefert
    heute nur den Platzhalter `" / "`.
 3. ~~**Risk aus der API** statt aus der AI-Summary~~ **Umgesetzt am 29.09.**
-   (uncommittet): Die API hat Vorrang, `extract_risk_from_summary` ist nur noch
+   (`7e4b3c5`): Die API hat Vorrang, `extract_risk_from_summary` ist nur noch
    Rückfall. Die Regex-Muster bleiben dafür bestehen.
 4. **Ticket-URL konstruieren** statt aus dem Fußtext der Beschreibung zu lesen
    (`extract_ticket_url`); die Konstruktion existiert schon als Rückfall.
@@ -274,6 +289,12 @@ beim Deployment sichtbar machen statt erst beim ersten Webhook.
   Abfrage ab (Vorfall 29.09.); ein Test in `tests/test_domain.py` sichert das ab.
   Neue Fragmente mit Feldern, die es in mehreren Typen gibt, brauchen im
   Zweifel ebenfalls einen Alias.
+- **Kein CVSS bei End-of-Life, auch wenn die Mondoo-Oberfläche 10.0 zeigt.**
+  Bei `MONDOO-EOL-NUMPY-1-26` zeigt die CVSS-Kachel „10.0", das Info-Fenster
+  daneben aber „No CVSS data available for this vulnerability or advisory".
+  Die 10.0 ist der Risk Score 100 geteilt durch 10; die API liefert für
+  EOL-Advisories `cvss.value` 0 / `NONE`. Einen Risk Score als CVSS
+  einzutragen, wurde mit `4e19628` bewusst abgeschafft.
 - **`baseValue`/`baseRating` bleiben ungenutzt.** Sie liegen auf der Risk-Skala;
   beim `CheckFinding` steht dort 100, was als CVSS 10.0 falsch wäre.
 - **Python 3.9-kompatibel**, obwohl Azure 3.11 fährt, weil die lokale
@@ -306,14 +327,13 @@ beim Deployment sichtbar machen statt erst beim ersten Webhook.
 
 - [x] Commits `cf166b1` und `a33c94a` deployen (29.09.). Ergebnis: Mondoo
       lehnt die Abfrage mit 422 ab, siehe Abschnitt 3.
-- [ ] **Fix vom 29.09. committen und deployen** (cvss-Aliase, API vor Text,
-      GraphQL-Meldungen im Log, Tests, Prüfskript). Danach im Log prüfen:
-      `Bewertung fuer //vadvisor.api.mondoo.app/cves/CVE-2026-31431
-      (CveFinding, 5 Assets) -> CVSS 7.8 (HIGH), Risk 100 (CRITICAL)`. Für eine
-      Fehlkonfiguration muss ebenfalls ein Risk-Wert erscheinen.
-- [ ] Nach dem Deployment im Ticket prüfen: `cvss_score`/`cvss_risk_rating` bei
-      CVEs gefüllt, bei End-of-Life leer, `mondoo_risk_score`/`_rating` überall
-      gefüllt.
+- [x] Fix vom 29.09. committen und deployen (`7e4b3c5`). End-of-Life geprüft
+      (RITM0043015: CVSS leer, Risk 100 CRITICAL).
+- [x] CVE-Ticket geprüft (RITM0043012: CVSS 9.4, Risk 100, beide CRITICAL).
+- [x] Fehlkonfigurations-Ticket geprüft (RITM0043014: Risk 100 CRITICAL aus der
+      API, CVSS leer).
+- [ ] Optional: Bewertung auf die Assets des Case beschränken statt auf den
+      ganzen Space (siehe „Scope ist der Space" in Abschnitt 5).
 - [ ] RITMs ohne Werte aus der Zeit zwischen Deployment und Fix nachtragen
       (RITM0043011 und der Case `3JzhsQ0…`).
 - [ ] Startprüfung der Mondoo-Abfrage beim Start der App (z. B. einmal
