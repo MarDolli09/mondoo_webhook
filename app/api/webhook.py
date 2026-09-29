@@ -34,10 +34,7 @@ async def receive_mondoo_webhook(
     case_parser: CaseParser = Depends(get_case_parser),
     ticket_synchronizer: TicketSynchronizer = Depends(get_ticket_synchronizer),
 ) -> dict[str, Any]:
-    """Verarbeitet eine authentifizierte Mondoo-Zustellung.
 
-    Ablauf: normalisieren, mit CVSS anreichern, mit ServiceNow synchronisieren.
-    """
     received_at = datetime.now(timezone.utc)
     started = time.perf_counter()
     logger.info(f"=== WEBHOOK EMPFANGEN (webhook-id {delivery.webhook_id}) ===")

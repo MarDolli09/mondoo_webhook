@@ -1,11 +1,3 @@
-"""Authentifizierung eingehender Mondoo-Zustellungen: Auth-Header und Signatur.
-
-Beide Pruefungen laufen immer vollstaendig, bevor der Body verarbeitet wird.
-So zeigt das Log bei einer Abweisung, ob die Zustellung gueltig von Mondoo
-signiert war und woran der Header scheiterte. Die Antwort ist in jedem
-Fehlerfall ein generisches 401; Secret-Werte werden nie protokolliert.
-"""
-
 import hmac
 import time
 from dataclasses import dataclass
@@ -36,12 +28,6 @@ class AuthenticatedDelivery:
 async def authenticate_delivery(
     request: Request, resources: AppResources = Depends(get_resources)
 ) -> AuthenticatedDelivery:
-    """FastAPI-Abhaengigkeit: prueft Auth-Header und Standard-Webhooks-Signatur.
-
-    Raises:
-        WebhookAuthenticationError: Header fehlt oder stimmt nicht, oder die
-            Signatur ist ungueltig bzw. veraltet.
-    """
     header_problem = _diagnose_auth_header(
         request.headers.get(settings.MONDOO_WEBHOOK_AUTH_HEADER),
         settings.MONDOO_WEBHOOK_AUTH_HEADER_VALUE.get_secret_value(),
