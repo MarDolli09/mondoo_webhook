@@ -1,6 +1,7 @@
 # Project Context Handover
 
-Stand: 28.09.2026, Commit `4e19628`. Arbeitsverzeichnis sauber, alle Änderungen committet.
+Stand: 29.09.2026, Commit `a33c94a`. Arbeitsverzeichnis sauber, alle Änderungen
+committet, **Deployment nach Azure noch offen**.
 
 ## 1. Executive Summary & Project Goal
 
@@ -17,8 +18,11 @@ Ablauf je Zustellung:
    angelegt, aktualisiert, geschlossen oder das Ereignis verworfen.
 
 Ziel des aktuellen Arbeitspakets: Die Kette läuft seit dem 28.09. vollständig
-gegen die Testinstanz `bmsptest`. Offen sind die Umstellung auf OAuth, der
-Livegang gegen `bmsp` und eine Optimierung der Mondoo-Abfrage.
+gegen die Testinstanz `bmsptest`. Die Mondoo-Abfrage ist auf einen gefilterten
+GraphQL-Aufruf je Finding umgestellt (committet, noch nicht deployt). Offen sind
+das Deployment dieser Umstellung, die Umstellung auf OAuth, der Livegang gegen
+`bmsp` und die weitere Ablösung von Textparsing und Stammdaten durch die API
+(siehe Abschnitte 5 und 6).
 
 ## 2. Tech Stack & Architecture Decisions
 
@@ -62,8 +66,8 @@ app/core       Konfiguration, Stammdaten, Logging, Ausnahmen, Signaturprüfung
 Tickets werden angelegt, aktualisiert und geschlossen. 50 Tests, ruff und mypy
 sind grün.
 
-**Zuletzt geändert** (Commit `4e19628` und die nachfolgende Umstellung auf die
-gefilterte Abfrage, beides noch **nicht deployt**):
+**Zuletzt geändert** (Commits `4e19628`, `cf166b1` und `a33c94a`, alle noch
+**nicht deployt**):
 
 - `app/domain/scores.py` (ersetzt `cvss.py`): `FindingScores` mit vier Werten,
   `normalize_cvss_score` (Eingabe 0–100, Ausgabe 0–10) und
@@ -133,6 +137,8 @@ nicht „Mission-Critical".
 | `tests/fakes.py` | Attrappen für Mondoo und ServiceNow, Ende-zu-Ende-Aufrufe |
 | `tests/test_architecture.py` | Architekturregeln als Test |
 | `tests/.env.test` | Dummy-Umgebung für Tests und Audits |
+| `scripts/verify_scores.py` | Führt die Produktionsabfrage gegen die echte API aus |
+| `scripts/introspect_next.py` | Introspektion für die offenen GraphQL-Kandidaten |
 | `README.md` | Ablauf, Mapping-Tabelle, Betrieb in Azure |
 
 ## 5. Open Issues, Edge Cases & Constraints
@@ -159,6 +165,45 @@ nicht „Mission-Critical".
 - **Scope ist der Space**, nicht das einzelne Asset. Der Wert entspricht damit
   dem, was die Mondoo-Oberfläche zum Finding zeigt, kann aber Assets umfassen,
   die nicht am Case hängen.
+
+**Wo die API weiteres Textparsing und Stammdaten ersetzen könnte**
+
+Analyse vom 28.09. Die Latenz liegt nach der Umstellung auf der ServiceNow-Seite
+(Token, `sys_user`, `order_now`, `PATCH`); Mondoo ist ein Request. Die folgenden
+Punkte bringen deshalb Sauberkeit, nicht Geschwindigkeit.
+
+Ohne Schemaprüfung umsetzbar:
+
+1. **Kein Lookup bei Close/Delete** (`case_parser.py`): Die Bewertung wird auch
+   dann geholt, wenn das RITM ohnehin geschlossen wird. Der Wert steckt nur in
+   der Work-Note (`CVSS: -`) und in `urgency`/`impact`, die beim Abschluss
+   belanglos sind. Spart einen Request pro Abschluss.
+2. **CVE aus der Finding-MRN** statt Regex auf den Titel (`extract_cve`). Die
+   MRN enthält die Kennung (`/cves/CVE-2024-0056`); ein Titel ohne CVE liefert
+   heute nur den Platzhalter `" / "`.
+3. **Risk aus der API** statt aus der AI-Summary (`extract_risk_from_summary`,
+   vier Regex-Muster für drei Markdown-Formate). Offene Entscheidung: Der Text
+   nennt das **Case**-Risiko, die API das **Finding**-Risiko im Space-Scope. In
+   den geprüften Fällen identisch (EOL 89/HIGH), bei mehreren Findings je Case
+   nicht zwingend.
+4. **Ticket-URL konstruieren** statt aus dem Fußtext der Beschreibung zu lesen
+   (`extract_ticket_url`); die Konstruktion existiert schon als Rückfall.
+
+Erst nach `scripts/introspect_next.py` entscheidbar:
+
+5. **Space-Anzeigename** über die API statt `CATEGORY_MAP` (9 fest verdrahtete
+   Space-IDs). Ein unbekannter Space landet heute als `eu-…-123456` im Ticket.
+6. **Benutzername/E-Mail zur `createdBy`-MRN** statt `USER_MAP` (3 Einträge).
+   Mit der E-Mail wird auch der ServiceNow-Lookup eindeutig.
+7. **`filter: {mrns: [...]}`** für alle Findings eines Case in einem Request
+   statt bis zu `MONDOO_MAX_FINDING_LOOKUPS` Aufrufen.
+8. **`epss { probability }` und `riskFactors`** als zusätzliche
+   Priorisierungsgrundlage; braucht neue Formularfelder.
+9. **CVEs eines Advisory**, damit das Feld `cve` bei Advisory-Tickets nicht leer
+   bleibt.
+
+Betrieb: Eine Startprüfung gegen die API würde einen falschen `MONDOO_API_KEY`
+beim Deployment sichtbar machen statt erst beim ersten Webhook.
 
 **Bewusste Entscheidungen**
 
@@ -195,14 +240,24 @@ nicht „Mission-Critical".
 
 ## 6. Next Immediate Steps (Checkliste)
 
-- [ ] Umstellung deployen und im Log prüfen: `Bewertung fuer //… (CveFinding,
-      6 Assets) -> CVSS 9.8 (CRITICAL), Risk 97 (CRITICAL)`. Für eine
-      Fehlkonfiguration muss jetzt ebenfalls ein Risk-Wert erscheinen.
+- [ ] Commits `cf166b1` und `a33c94a` deployen und im Log prüfen: `Bewertung
+      fuer //… (CveFinding, 6 Assets) -> CVSS 9.8 (CRITICAL), Risk 97
+      (CRITICAL)`. Für eine Fehlkonfiguration muss jetzt ebenfalls ein
+      Risk-Wert erscheinen.
 - [ ] Nach dem Deployment im Ticket prüfen: `cvss_score`/`cvss_risk_rating` bei
       CVEs gefüllt, bei End-of-Life leer, `mondoo_risk_score`/`_rating` überall
       gefüllt.
-- [ ] Optional: `epss { probability }` und `riskFactors` mitabfragen, sobald das
-      Formular Felder dafür hat.
+- [ ] Obsolete App-Settings in Azure entfernen (werden wegen `extra="ignore"`
+      stillschweigend übergangen, sind aber irreführend):
+      `MONDOO_GRAPHQL_MAX_PAGES`, `CVSS_SEARCH_BUDGET_SECONDS`,
+      `CVSS_SEARCH_LOG_INTERVAL`, `CVSS_MAX_FINDING_ATTEMPTS`,
+      `CVSS_RATING_THRESHOLDS` und `MONDOO_AUTH_HEADER` (falscher Name, die App
+      liest `MONDOO_WEBHOOK_AUTH_HEADER`).
+- [ ] `scripts/introspect_next.py` ausführen und anhand der Ausgabe über die
+      Punkte 5 bis 9 aus Abschnitt 5 entscheiden.
+- [ ] Punkte 1, 2 und 4 aus Abschnitt 5 umsetzen (kein Lookup beim Abschluss,
+      CVE aus der MRN, Ticket-URL konstruieren). Zu Punkt 3 (Risk aus der API
+      statt aus der AI-Summary) steht die Entscheidung noch aus.
 - [ ] OAuth auf `bmsptest` klären: Eintrag in der Application Registry prüfen
       oder neu anlegen, Werte im Key Vault hinterlegen, dann
       `SNOW_AUTH_MODE=oauth`.
