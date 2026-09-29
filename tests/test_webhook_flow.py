@@ -50,7 +50,8 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(variables["cvss_risk_rating"], "HIGH")
         (patch,) = backends.find("servicenow", "PATCH", "/sc_req_item/")
         self.assertEqual(patch.body["short_description"], variables["mondoo_title"])
-        self.assertNotIn("urgency", patch.body)
+        self.assertEqual(patch.body["urgency"], variables["urgency"])
+        self.assertEqual(patch.body["impact"], variables["impact"])
         self.assertNotIn("assignment_group", patch.body)
         self.assertEqual(
             patch.body["watch_list"], "usr-lars.siefert@mosca.com,usr-Marius Dollinger"

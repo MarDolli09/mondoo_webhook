@@ -80,8 +80,8 @@ class TaskFieldsTest(unittest.TestCase):
             make_case(), opened_by_sys_id="u1", watcher_sys_ids=["w1", "w2"]
         )
         self.assertNotIn("assignment_group", body)
-        self.assertNotIn("urgency", body)
-        self.assertNotIn("impact", body)
+        # Wie die Katalogvariablen, sonst bliebe das RITM auf 3 - Low
+        self.assertEqual((body["urgency"], body["impact"]), ("1", "1"))
         self.assertEqual(body["watch_list"], "w1,w2")
         self.assertEqual(body["state"], "1")
 

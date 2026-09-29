@@ -100,7 +100,9 @@ def build_create_fields(
 ) -> dict[str, Any]:
     """RITM-Felder direkt nach der Bestellung eines neuen Requests.
 
-    Urgency und Impact uebernimmt ServiceNow aus den Katalogvariablen.
+    Urgency und Impact werden wie die Katalogvariablen gesetzt: Ohne "Map to
+    field" am Formular stuende das RITM sonst auf dem Standard 3 - Low, bis ein
+    Update-Ereignis kommt.
     """
     body: dict[str, Any] = {
         "work_notes": (
@@ -110,6 +112,8 @@ def build_create_fields(
         "state": STATE_OPEN,
         "correlation_id": correlation_id(case),
         "short_description": ticket_title(case),
+        "urgency": case.urgency,
+        "impact": case.impact,
     }
     if opened_by_sys_id:
         body["opened_by"] = opened_by_sys_id

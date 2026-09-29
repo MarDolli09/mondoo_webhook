@@ -46,8 +46,8 @@ Katalogformular „Mondoo Vulnerability“ (`order_now`), Reihenfolge wie im For
 | Mondoo MRN | `mondoo_mrn` | Case-MRN (in ServiceNow per „Map to field“ → `correlation_id`) |
 
 RITM-Felder per PATCH nach der Bestellung: `state` (1), `correlation_id`,
-`short_description` (= Titel), `opened_by` (`mosca.rest`), `watch_list`,
-`work_notes`. Urgency und Impact übernimmt ServiceNow aus dem Request.
+`short_description` (= Titel), `urgency`/`impact` (wie die Katalogvariablen),
+`opened_by` (`mosca.rest`), `watch_list`, `work_notes`.
 Folgeereignisse aktualisieren `work_notes`,
 bei ermittelter Priorität `urgency`/`impact` und schließen bei Close/Delete.
 

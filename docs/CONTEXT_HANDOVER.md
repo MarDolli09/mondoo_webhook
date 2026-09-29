@@ -211,6 +211,24 @@ nicht „Mission-Critical".
   `mondoo_risk_score`, `mondoo_ticket_url`, `number_of_affected_assets`,
   `created_by`). Die ursprüngliche Mapping-Tabelle nannte andere. Vor dem
   Livegang muss das Formular auf Prod geprüft werden.
+- **Urgency/Impact beim Anlegen falsch** (beobachtet 29.09.): Neue RITMs stehen
+  auf Impact 3 - Low / Priority 4 - Low, obwohl die Katalogvariablen
+  `urgency`/`impact` = 1 sind. Die Variablen haben auf `bmsptest` kein „Map to
+  field", und der PATCH nach der Bestellung lässt Urgency/Impact bewusst weg
+  (`build_create_fields`, Annahme vom 17.09., nie geprüft). Erst ein
+  Update-Ereignis setzt die Felder (`build_update_fields`). **Umgesetzt am
+  29.09. (uncommittet, nicht deployt):** `build_create_fields` sendet
+  `urgency`/`impact` wie die Katalogvariablen, immer, auch bei Quelle
+  `default`. Updates lassen die Felder bei Quelle `default` weiterhin
+  unberührt, damit manuelle Änderungen erhalten bleiben. Noch offen: „Map to
+  field" in ServiceNow, damit die Werte schon bei der Bestellung stehen; ob
+  ServiceNow die Priority am RITM aus Urgency/Impact neu berechnet.
+- **Short Description des Catalog Task** („Mondoo Vulnerability - Windows
+  Clients") setzt der Flow/Workflow des Katalogelements, nicht die App. Die App
+  schreibt nur `sc_req_item` (Short Description = `Mondoo - <Titel>` per PATCH
+  nach der Bestellung). Soll der Task den Mondoo-Titel tragen, im Flow die
+  Katalogvariable `mondoo_title` verwenden, nicht die Short Description des RITM:
+  Der Flow läuft bei der Bestellung, also vor dem PATCH.
 - **`mondoo_mrn` ohne „Map to field"**: Die `correlation_id` setzt erst der PATCH
   nach der Bestellung. Schlägt der fehl, entsteht beim nächsten Ereignis ein
   zweites Ticket.
@@ -355,5 +373,10 @@ beim Deployment sichtbar machen statt erst beim ersten Webhook.
 - [ ] Vor dem Livegang das Katalogformular auf `bmsp` prüfen: sys_id und
       Variablennamen. Bei Abweichung die Zuordnung konfigurierbar machen.
 - [ ] „Map to field" für `mondoo_mrn` auf `correlation_id` aktivieren.
+- [ ] Urgency/Impact beim Anlegen (Abschnitt 5): App-Änderung committen und
+      deployen, dann an einem neuen RITM prüfen, dass Impact/Urgency sofort
+      den Variablen entsprechen und ob Priority mitzieht.
+- [ ] In ServiceNow „Map to field" für die Variablen `urgency` → Urgency und
+      `impact` → Impact aktivieren (`bmsptest` und vor dem Livegang `bmsp`).
 - [ ] Optional: Getrennte Ressourcengruppen oder ein Deployment-Slot für Test
       und Prod, damit Einstellungen nicht gegeneinander getauscht werden müssen.
