@@ -1,5 +1,6 @@
 """Fachregeln in ``app.domain`` und das Eingangsmodell."""
 
+import re
 import unittest
 
 import tests  # noqa: F401  (Dummy-Umgebung)
@@ -19,6 +20,7 @@ from app.domain.scores import (
 )
 from app.models.mondoo import MondooWebhookEvent
 from app.services.mondoo.findings import extract_finding_scores, highest_scores
+from app.services.mondoo.queries import CVSS_FIELDS, GET_FINDING_SCORES_QUERY
 
 PRIORITY_MAP = {
     "CRITICAL": ("1", "1"),
@@ -87,7 +89,7 @@ class FindingScoresTest(unittest.TestCase):
             "mrn": "//vadvisor.api.mondoo.app/advisories/MONDOO-EOL-DOTNET-8",
             "riskValue": 89,
             "rating": "HIGH",
-            "cvss": {"value": 0, "rating": "NONE"},
+            "advisoryCvss": {"value": 0, "rating": "NONE"},
         }
 
         scores = extract_finding_scores(node)
@@ -102,7 +104,7 @@ class FindingScoresTest(unittest.TestCase):
             "mrn": "//vadvisor.api.mondoo.app/cves/CVE-2026-23450",
             "riskValue": 97,
             "rating": "CRITICAL",
-            "cvss": {"value": 98, "rating": "CRITICAL"},
+            "cveCvss": {"value": 98, "rating": "CRITICAL"},
         }
 
         scores = extract_finding_scores(node)
@@ -128,8 +130,8 @@ class FindingScoresTest(unittest.TestCase):
     def test_highest_risk_of_all_asset_nodes_counts(self) -> None:
         # Die API liefert einen Knoten je betroffenem Asset
         nodes = [
-            {"riskValue": 60, "rating": "MEDIUM", "cvss": {"value": 75}},
-            {"riskValue": 89, "rating": "HIGH", "cvss": {"value": 75}},
+            {"riskValue": 60, "rating": "MEDIUM", "cveCvss": {"value": 75}},
+            {"riskValue": 89, "rating": "HIGH", "cveCvss": {"value": 75}},
         ]
 
         scores = highest_scores(nodes)
@@ -139,6 +141,13 @@ class FindingScoresTest(unittest.TestCase):
 
     def test_without_nodes_there_are_no_scores(self) -> None:
         self.assertEqual(highest_scores([]), NO_FINDING_SCORES)
+
+    def test_cvss_is_requested_under_one_alias_per_type(self) -> None:
+        # cvss ist je Typ mal CvssScore!, mal CvssScore. Ohne Alias lehnt Mondoo
+        # die ganze Abfrage ab (HTTP 422, GRAPHQL_VALIDATION_FAILED).
+        aliases = re.findall(r"(\w+):\s*cvss\s*\{", GET_FINDING_SCORES_QUERY)
+        self.assertEqual(tuple(aliases), CVSS_FIELDS)
+        self.assertNotRegex(GET_FINDING_SCORES_QUERY, r"(?m)^\s*cvss\s*\{")
 
 
 class PriorityTest(unittest.TestCase):

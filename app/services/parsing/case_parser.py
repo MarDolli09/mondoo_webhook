@@ -191,25 +191,26 @@ def _unique_finding_refs(refs: Sequence[FindingRef]) -> list[FindingRef]:
 def _resolve_mondoo_risk(
     description: str, scores: FindingScores
 ) -> tuple[Optional[str], Optional[str]]:
-    """Mondoo Risk Rating und Score, bevorzugt aus dem Befundtext des Case.
+    """Mondoo Risk Rating und Score, bevorzugt aus der Mondoo-API.
 
-    Der Befundtext nennt das Gesamtrisiko des Case. Fehlt es dort, gilt der
-    Wert des gefundenen Findings aus der Mondoo-API.
+    Der Befundtext ist Fliesstext der KI ("The combined risk is **high**
+    because ...") und kann vom Wert der API abweichen. Er gilt nur, wenn die
+    API keinen Wert liefert.
     """
-    risk_rating, risk_score = extract_risk_from_summary(description)
-    if risk_rating:
-        logger.info(
-            f"Mondoo Risk Rating aus Befundtext gelesen: "
-            f"{risk_rating} ({risk_score or '-'}/100)"
-        )
-        return risk_rating, risk_score
-
     if scores.risk_rating or scores.risk_score:
         logger.info(
             f"Mondoo Risk Rating aus der Mondoo-API: "
             f"{scores.risk_rating or '-'} ({scores.risk_score or '-'}/100)"
         )
         return scores.risk_rating, scores.risk_score
+
+    risk_rating, risk_score = extract_risk_from_summary(description)
+    if risk_rating:
+        logger.warning(
+            f"Mondoo-API ohne Risk-Wert, Rating aus dem Befundtext gelesen: "
+            f"{risk_rating} ({risk_score or '-'}/100)"
+        )
+        return risk_rating, risk_score
 
     if not scores.cvss_rating:
         logger.warning(

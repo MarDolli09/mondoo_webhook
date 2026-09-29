@@ -9,6 +9,7 @@ from app.domain.scores import (
     normalize_cvss_score,
     normalize_risk_score,
 )
+from app.services.mondoo.queries import CVSS_FIELDS
 
 __all__ = ["extract_finding_scores", "highest_scores"]
 
@@ -19,11 +20,14 @@ EMPTY_RATINGS = frozenset({"NONE", "NONE - EOL"})
 def extract_finding_scores(node: Mapping[str, Any]) -> FindingScores:
     """Bewertungen eines Knotens; CVSS nur aus dem ``cvss``-Objekt.
 
+    Das ``cvss``-Objekt steht je Typ unter einem eigenen Alias (``CVSS_FIELDS``).
     ``baseValue`` und ``baseScore`` sind der Basiswert auf der Risk-Skala und
     kein CVSS-Wert; sie bleiben deshalb unberuecksichtigt.
     """
-    raw_cvss = node.get("cvss")
-    cvss: Mapping[str, Any] = raw_cvss if isinstance(raw_cvss, Mapping) else {}
+    cvss: Mapping[str, Any] = next(
+        (node[field] for field in CVSS_FIELDS if isinstance(node.get(field), Mapping)),
+        {},
+    )
     _, cvss_score = normalize_cvss_score(cvss.get("value"))
     return FindingScores(
         cvss_score=cvss_score,

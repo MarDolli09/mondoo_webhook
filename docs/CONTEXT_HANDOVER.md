@@ -1,7 +1,8 @@
 # Project Context Handover
 
-Stand: 29.09.2026, Commit `a33c94a`. Arbeitsverzeichnis sauber, alle Änderungen
-committet, **Deployment nach Azure noch offen**.
+Stand: 29.09.2026, Commit `287ef41`. Der Fix für die von Mondoo abgelehnte
+Abfrage (Abschnitt 3) liegt **uncommittet** in der Arbeitskopie, gegen die echte
+API geprüft, **Deployment noch offen**.
 
 ## 1. Executive Summary & Project Goal
 
@@ -18,11 +19,12 @@ Ablauf je Zustellung:
    angelegt, aktualisiert, geschlossen oder das Ereignis verworfen.
 
 Ziel des aktuellen Arbeitspakets: Die Kette läuft seit dem 28.09. vollständig
-gegen die Testinstanz `bmsptest`. Die Mondoo-Abfrage ist auf einen gefilterten
-GraphQL-Aufruf je Finding umgestellt (committet, noch nicht deployt). Offen sind
-das Deployment dieser Umstellung, die Umstellung auf OAuth, der Livegang gegen
-`bmsp` und die weitere Ablösung von Textparsing und Stammdaten durch die API
-(siehe Abschnitte 5 und 6).
+gegen die Testinstanz `bmsptest`. Die gefilterte GraphQL-Abfrage je Finding ist
+seit dem 29.09. deployt, wurde aber am selben Tag von Mondoo mit HTTP 422
+abgelehnt (Schemaänderung, Abschnitt 3); Tickets entstanden ohne CVSS/Risk. Der
+Fix ist fertig und geprüft, aber noch nicht committet und deployt. Danach offen:
+Umstellung auf OAuth, Livegang gegen `bmsp` und die weitere Ablösung von
+Textparsing und Stammdaten durch die API (siehe Abschnitte 5 und 6).
 
 ## 2. Tech Stack & Architecture Decisions
 
@@ -63,11 +65,40 @@ app/core       Konfiguration, Stammdaten, Logging, Ausnahmen, Signaturprüfung
 ## 3. Active Task & Current State
 
 **Funktionsfähig:** Ende-zu-Ende gegen `bmsptest` mit `SNOW_AUTH_MODE=basic`.
-Tickets werden angelegt, aktualisiert und geschlossen. 50 Tests, ruff und mypy
-sind grün.
+Tickets werden angelegt, aktualisiert und geschlossen. 53 Tests, ruff und mypy
+sind grün (zu den 9 Windows-Ausfällen in `test_config` siehe Abschnitt 5).
 
-**Zuletzt geändert** (Commits `4e19628`, `cf166b1` und `a33c94a`, alle noch
-**nicht deployt**):
+**Vorfall 29.09.: Mondoo lehnt die Abfrage ab.** Nach dem Deployment von
+`cf166b1` blieben `cvss_*` und `mondoo_risk_*` in allen Tickets leer (z. B.
+RITM0043011, CVE-2026-31431). Log:
+`Abfrage fuer … abgebrochen: … HTTP 422: Fields "cvss" conflict because they
+return conflicting types "CvssScore" and "CvssScore!"` (`GRAPHQL_VALIDATION_FAILED`).
+Mondoo deklariert `cvss` inzwischen je Finding-Typ unterschiedlich (einmal
+Pflichtfeld, sonst optional); gleichnamige Felder in überlappenden Fragmenten
+müssen aber denselben Typ haben. Die ganze Abfrage scheitert, für jedes Finding.
+Am 28.09. lief dieselbe Abfrage noch, das Schema hat sich also über Nacht
+geändert. Die Anreicherung ist optional, deshalb entstanden die Tickets trotzdem,
+nur ohne Werte.
+
+**Fix (uncommittet, in Kudu gegen die echte API geprüft):**
+
+- `app/services/mondoo/queries.py`: `cvss` je Typ unter eigenem Alias
+  (`cveCvss`, `advisoryCvss`, `packageCvss`; Konstante `CVSS_FIELDS`).
+- `app/services/mondoo/findings.py`: liest CVSS über `CVSS_FIELDS`.
+- `app/services/mondoo/api.py`: Bei HTTP-Fehlern und `errors` im Rumpf werden
+  alle GraphQL-Meldungen dedupliziert protokolliert (bis 2000 Zeichen), statt
+  den Rumpf nach 400 Zeichen abzuschneiden.
+- `app/services/parsing/case_parser.py`: **Risk aus der API vor dem Befundtext**
+  (Entscheidung 29.09.). Der Text griff „The combined risk is **high**
+  because…" als `HIGH` ohne Score ab, obwohl Mondoo 100/CRITICAL meldete. Der
+  Text gilt nur noch als Rückfall, mit Warnung im Log.
+- `scripts/verify_scores.py`: nimmt Finding-MRN und Scopes als Argumente, misst
+  die Dauer, gibt bei HTTP-Fehlern den Antwortrumpf aus; Abfrage mit Aliasen.
+- Tests: Regressionstest „`cvss` nur mit Alias", Ende-zu-Ende-Test für 422
+  (Ticket entsteht, Grund im Log), Test „API vor Text".
+
+**Davor geändert** (Commits `4e19628`, `cf166b1` und `a33c94a`, seit 29.09.
+deployt):
 
 - `app/domain/scores.py` (ersetzt `cvss.py`): `FindingScores` mit vier Werten,
   `normalize_cvss_score` (Eingabe 0–100, Ausgabe 0–10) und
@@ -84,9 +115,9 @@ sind grün.
 - `app/services/mondoo/findings.py`: CVSS ausschließlich aus `cvss.value` /
   `cvss.rating`, Risk aus `riskValue`/`rating`. `baseValue` bleibt ungenutzt, es
   liegt auf der Risk-Skala (CheckFinding: 100).
-- `app/services/parsing/case_parser.py`: Risk-Werte zuerst aus der AI-Summary,
-  sonst aus der API; gefragt wird im Scope des Space (`ownerMrn`), nicht je
-  Asset. Alle Finding-Typen werden abgefragt, auch Fehlkonfigurationen.
+- `app/services/parsing/case_parser.py`: gefragt wird im Scope des Space
+  (`ownerMrn`), nicht je Asset. Alle Finding-Typen werden abgefragt, auch
+  Fehlkonfigurationen.
 - Entfallen: `MONDOO_GRAPHQL_MAX_PAGES`, `CVSS_SEARCH_BUDGET_SECONDS`,
   `CVSS_SEARCH_LOG_INTERVAL`, `CVSS_MAX_FINDING_ATTEMPTS` (ersetzt durch
   `MONDOO_MAX_FINDING_LOOKUPS`, Standard 5), `PaginationLimitExceededError`,
@@ -94,13 +125,18 @@ sind grün.
   `calculate_rating_from_score`, `FindingTypeProfile.resolves_scores`, das Feld
   `found_on_page`.
 
-**Zuletzt geprüft** (gefilterte Abfrage gegen die echte API, Scope = Space-MRN):
+**Zuletzt geprüft** (gefilterte Abfrage gegen die echte API, Scope = Space-MRN;
+die ersten drei am 28.09. ohne Aliase, die letzte am 29.09. mit Aliasen):
 
 | Finding | `totalCount` | `riskValue` / `rating` | `cvss` |
 |---|---|---|---|
 | `//vadvisor.api.mondoo.app/cves/CVE-2026-23450` | 6 | 97 / `CRITICAL` | `{value: 98, rating: CRITICAL}` |
 | `//vadvisor.api.mondoo.app/advisories/MONDOO-EOL-DOTNET-8` | 3 | 89 / `HIGH` | `{value: 0, rating: NONE}` |
 | `//policy.api.mondoo.app/queries/cis-microsoft-azure-foundations--8.3.2` | 5 | 100 / `CRITICAL` | kein Feld (`CheckFinding`) |
+| `//vadvisor.api.mondoo.app/cves/CVE-2026-31431` | 5 | 85, 85, 85, 91, 100 / höchstes `CRITICAL` | `cveCvss: {value: 78, rating: HIGH}` |
+
+Für CVE-2026-31431 ergibt das im Ticket CVSS 7.8 (HIGH) und Risk 100 (CRITICAL),
+genau wie in der Mondoo-Oberfläche. Dauer 1,7 s (App-Timeout 10 s).
 
 Daraus folgt: **CVSS kommt auf der Skala 0–100** (98 entspricht 9.8), `0` heißt
 „kein CVSS", `totalCount` ist die Anzahl betroffener Assets und die API liefert
@@ -127,8 +163,8 @@ nicht „Mission-Critical".
 | `app/models/mondoo.py` | Eingangsmodell des Webhooks |
 | `app/models/case.py` | `NormalizedCase` als interne Zwischenform |
 | `app/services/parsing/case_parser.py` | Klassifikation, Anreicherung, Normalisierung |
-| `app/services/mondoo/queries.py` | GraphQL-Abfrage `findings(filter: {mrn})` |
-| `app/services/mondoo/api.py` | GraphQL-Transport, Union-Fehler der Antwort |
+| `app/services/mondoo/queries.py` | GraphQL-Abfrage `findings(filter: {mrn})`, `cvss` je Typ mit Alias (`CVSS_FIELDS`) |
+| `app/services/mondoo/api.py` | GraphQL-Transport, Union-Fehler, GraphQL-Meldungen fürs Log |
 | `app/services/mondoo/client.py` | Abfrage je Finding, höchstes Risiko über alle Assets |
 | `app/services/mondoo/findings.py` | Auswertung einzelner Finding-Knoten |
 | `app/services/servicenow/mapping.py` | Katalogvariablen und RITM-Felder |
@@ -137,7 +173,7 @@ nicht „Mission-Critical".
 | `tests/fakes.py` | Attrappen für Mondoo und ServiceNow, Ende-zu-Ende-Aufrufe |
 | `tests/test_architecture.py` | Architekturregeln als Test |
 | `tests/.env.test` | Dummy-Umgebung für Tests und Audits |
-| `scripts/verify_scores.py` | Führt die Produktionsabfrage gegen die echte API aus |
+| `scripts/verify_scores.py` | Führt die Produktionsabfrage gegen die echte API aus; optional `<findingMrn> [scope …]`, misst die Dauer |
 | `scripts/introspect_next.py` | Introspektion für die offenen GraphQL-Kandidaten |
 | `README.md` | Ablauf, Mapping-Tabelle, Betrieb in Azure |
 
@@ -145,6 +181,16 @@ nicht „Mission-Critical".
 
 **Offene Punkte**
 
+- **Schemaänderungen bei Mondoo fallen erst beim Webhook auf.** Der Vorfall vom
+  29.09. zeigte sich nur als leere Felder im Ticket, der Grund stand im Log als
+  ERROR. Die Anreicherung ist bewusst optional, deshalb gibt es keinen 502.
+  Eine Startprüfung (siehe „Betrieb" unten) hätte ihn beim Deployment sichtbar
+  gemacht.
+- **Tickets ohne Werte:** RITMs, die zwischen dem Deployment von `cf166b1` und
+  dem Fix entstanden sind (bekannt: RITM0043011 zu Case `3Jzgf1…`, außerdem der
+  Case `3JzhsQ0…` von 08:20), haben leere `cvss_*`/`mondoo_risk_*`-Felder. Ob
+  ein späteres Update-Ereignis sie füllt, ist nicht geprüft; ggf. manuell
+  nachtragen.
 - **OAuth auf `bmsptest` scheitert** (`access_denied`). Benutzer und Passwort
   stimmen dort (Basic Auth funktioniert), Client-ID und Client Secret stammen
   aus Prod und gelten auf der Testinstanz nicht. Gegen Prod liefert derselbe
@@ -181,11 +227,9 @@ Ohne Schemaprüfung umsetzbar:
 2. **CVE aus der Finding-MRN** statt Regex auf den Titel (`extract_cve`). Die
    MRN enthält die Kennung (`/cves/CVE-2024-0056`); ein Titel ohne CVE liefert
    heute nur den Platzhalter `" / "`.
-3. **Risk aus der API** statt aus der AI-Summary (`extract_risk_from_summary`,
-   vier Regex-Muster für drei Markdown-Formate). Offene Entscheidung: Der Text
-   nennt das **Case**-Risiko, die API das **Finding**-Risiko im Space-Scope. In
-   den geprüften Fällen identisch (EOL 89/HIGH), bei mehreren Findings je Case
-   nicht zwingend.
+3. ~~**Risk aus der API** statt aus der AI-Summary~~ **Umgesetzt am 29.09.**
+   (uncommittet): Die API hat Vorrang, `extract_risk_from_summary` ist nur noch
+   Rückfall. Die Regex-Muster bleiben dafür bestehen.
 4. **Ticket-URL konstruieren** statt aus dem Fußtext der Beschreibung zu lesen
    (`extract_ticket_url`); die Konstruktion existiert schon als Rückfall.
 
@@ -222,6 +266,14 @@ beim Deployment sichtbar machen statt erst beim ersten Webhook.
 - **Alle Finding-Typen werden abgefragt.** Mit der gefilterten Abfrage kostet
   das einen Request, deshalb erhalten auch Fehlkonfigurationen ihr Risk Rating
   aus der API.
+- **Risk aus der API vor dem Befundtext** (29.09.). Der KI-Text ist Fließtext
+  und wich im geprüften Fall ab („combined risk is **high**" gegenüber
+  100/CRITICAL in der API). Der Text nennt zwar das Case-Risiko, die API das
+  Finding-Risiko im Space-Scope, maßgeblich ist aber der Wert der API.
+- **`cvss` immer mit Alias je Typ abfragen.** Ohne Alias lehnt Mondoo die
+  Abfrage ab (Vorfall 29.09.); ein Test in `tests/test_domain.py` sichert das ab.
+  Neue Fragmente mit Feldern, die es in mehreren Typen gibt, brauchen im
+  Zweifel ebenfalls einen Alias.
 - **`baseValue`/`baseRating` bleiben ungenutzt.** Sie liegen auf der Risk-Skala;
   beim `CheckFinding` steht dort 100, was als CVSS 10.0 falsch wäre.
 - **Python 3.9-kompatibel**, obwohl Azure 3.11 fährt, weil die lokale
@@ -237,16 +289,36 @@ beim Deployment sichtbar machen statt erst beim ersten Webhook.
   `oryx-manifest.toml` und `output.tar.zst`, nicht der Quellcode.
 - Die Testinstanz nutzt ein Konto, das auch Kollegen verwenden. Wiederholte
   Fehlversuche können es sperren.
+- **Logs in Kudu SSH durchsuchen:** `grep -h "<Suchtext>"
+  /home/LogFiles/*docker*.log | tail -20`. Schneller als der Log-Stream, um die
+  Zeilen zu einer Correlation-ID zu finden.
+- **Skripte in Kudu SSH:** Beim Einfügen per Heredoc wird die Anzeige langer
+  Texte zerstückelt, der Inhalt kann dabei beschädigt werden. Immer die ganze
+  Datei kopieren (Strg+A) und mit `md5sum` gegen den lokalen Stand prüfen
+  (`tr -d '\r' < scripts/verify_scores.py | md5sum`).
+- **Lokale Entwicklung unter Windows** (venv mit Python 3.11): Im venv fehlt
+  `tzdata`, ohne das `ZoneInfo("Europe/Berlin")` scheitert. Die 9
+  Unterprozess-Tests in `tests/test_config.py` scheitern dort mit `WinError
+  10106`, auch ohne Codeänderung. ruff und mypy sind nicht im venv installiert.
+  Die Arbeitskopie nutzt CRLF (`core.autocrlf=true`).
 
 ## 6. Next Immediate Steps (Checkliste)
 
-- [ ] Commits `cf166b1` und `a33c94a` deployen und im Log prüfen: `Bewertung
-      fuer //… (CveFinding, 6 Assets) -> CVSS 9.8 (CRITICAL), Risk 97
-      (CRITICAL)`. Für eine Fehlkonfiguration muss jetzt ebenfalls ein
-      Risk-Wert erscheinen.
+- [x] Commits `cf166b1` und `a33c94a` deployen (29.09.). Ergebnis: Mondoo
+      lehnt die Abfrage mit 422 ab, siehe Abschnitt 3.
+- [ ] **Fix vom 29.09. committen und deployen** (cvss-Aliase, API vor Text,
+      GraphQL-Meldungen im Log, Tests, Prüfskript). Danach im Log prüfen:
+      `Bewertung fuer //vadvisor.api.mondoo.app/cves/CVE-2026-31431
+      (CveFinding, 5 Assets) -> CVSS 7.8 (HIGH), Risk 100 (CRITICAL)`. Für eine
+      Fehlkonfiguration muss ebenfalls ein Risk-Wert erscheinen.
 - [ ] Nach dem Deployment im Ticket prüfen: `cvss_score`/`cvss_risk_rating` bei
       CVEs gefüllt, bei End-of-Life leer, `mondoo_risk_score`/`_rating` überall
       gefüllt.
+- [ ] RITMs ohne Werte aus der Zeit zwischen Deployment und Fix nachtragen
+      (RITM0043011 und der Case `3JzhsQ0…`).
+- [ ] Startprüfung der Mondoo-Abfrage beim Start der App (z. B. einmal
+      `GET_FINDING_SCORES_QUERY` gegen den Space): Ein 422 oder ein falscher
+      `MONDOO_API_KEY` fiele dann beim Deployment auf.
 - [ ] Obsolete App-Settings in Azure entfernen (werden wegen `extra="ignore"`
       stillschweigend übergangen, sind aber irreführend):
       `MONDOO_GRAPHQL_MAX_PAGES`, `CVSS_SEARCH_BUDGET_SECONDS`,
@@ -256,8 +328,7 @@ beim Deployment sichtbar machen statt erst beim ersten Webhook.
 - [ ] `scripts/introspect_next.py` ausführen und anhand der Ausgabe über die
       Punkte 5 bis 9 aus Abschnitt 5 entscheiden.
 - [ ] Punkte 1, 2 und 4 aus Abschnitt 5 umsetzen (kein Lookup beim Abschluss,
-      CVE aus der MRN, Ticket-URL konstruieren). Zu Punkt 3 (Risk aus der API
-      statt aus der AI-Summary) steht die Entscheidung noch aus.
+      CVE aus der MRN, Ticket-URL konstruieren). Punkt 3 ist erledigt.
 - [ ] OAuth auf `bmsptest` klären: Eintrag in der Application Registry prüfen
       oder neu anlegen, Werte im Key Vault hinterlegen, dann
       `SNOW_AUTH_MODE=oauth`.

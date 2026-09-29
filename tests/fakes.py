@@ -92,6 +92,7 @@ class FakeBackends:
     finding_nodes: list[dict[str, Any]] = field(default_factory=list)
     requests: list[RecordedRequest] = field(default_factory=list)
     token_fetches: int = 0
+    mondoo_status: int = 200
     token_status: int = 200
     lookup_status: int = 200
     order_status: int = 200
@@ -136,6 +137,18 @@ class FakeBackends:
         return response
 
     def _findings(self) -> httpx.Response:
+        if self.mondoo_status != 200:
+            # So lehnt Mondoo eine Abfrage ab, die nicht zum Schema passt;
+            # dieselbe Meldung kommt je betroffenem Fragmentpaar.
+            conflict = {
+                "message": 'Fields "cvss" conflict because they return '
+                'conflicting types "CvssScore" and "CvssScore!".',
+                "locations": [{"line": 25, "column": 13}],
+                "extensions": {"code": "GRAPHQL_VALIDATION_FAILED"},
+            }
+            return httpx.Response(
+                self.mondoo_status, json={"errors": [conflict, conflict]}
+            )
         findings = {
             "totalCount": len(self.finding_nodes),
             "edges": [{"node": node} for node in self.finding_nodes],

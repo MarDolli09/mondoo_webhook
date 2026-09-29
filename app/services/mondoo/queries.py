@@ -1,6 +1,11 @@
 """GraphQL-Abfragen an die Mondoo-API."""
 
-__all__ = ["GET_FINDING_SCORES_QUERY"]
+__all__ = ["CVSS_FIELDS", "GET_FINDING_SCORES_QUERY"]
+
+# Aliase des cvss-Objekts je Finding-Typ. Mondoo deklariert cvss nicht bei allen
+# Typen gleich (CvssScore! bzw. CvssScore); ohne Alias lehnt die API die ganze
+# Abfrage mit HTTP 422 ab ("Fields cvss conflict ... conflicting types").
+CVSS_FIELDS = ("cveCvss", "advisoryCvss", "packageCvss")
 
 # Holt genau ein Finding ueber den Filter; die API liefert einen Knoten je
 # betroffenem Asset. CheckFinding und GenericFinding haben kein cvss-Objekt.
@@ -16,19 +21,19 @@ query GetFindingScores($scopeMrn: String!, $findingMrn: String!, $first: Int!) {
             mrn
             riskValue
             rating
-            cvss { value rating }
+            cveCvss: cvss { value rating }
           }
           ... on AdvisoryFinding {
             mrn
             riskValue
             rating
-            cvss { value rating }
+            advisoryCvss: cvss { value rating }
           }
           ... on PackageFinding {
             mrn
             riskValue
             rating
-            cvss { value rating }
+            packageCvss: cvss { value rating }
           }
           ... on CheckFinding {
             mrn

@@ -24,7 +24,7 @@ CVE_NODE = {
     "mrn": "//vadvisor.api.mondoo.app/cves/CVE-2024-0056",
     "riskValue": 72,
     "rating": "HIGH",
-    "cvss": {"value": 81, "rating": "HIGH"},
+    "cveCvss": {"value": 81, "rating": "HIGH"},
 }
 from tests.test_mapping import FORM_VARIABLES  # noqa: E402
 
@@ -57,6 +57,44 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(backends.find("servicenow", "GET", "sys_user_group"), [])
         self.assertNotIn("sysparm_requested_for", order.body)
+
+    async def test_risk_from_api_takes_precedence_over_summary_text(self) -> None:
+        payload = load_fixture("case_created_vulnerability.json")
+        payload["body"]["content"]["description"] = (
+            "## Summary\n\nThe combined risk is **high** because exploits exist."
+        )
+        critical = {**CVE_NODE, "riskValue": 100, "rating": "CRITICAL"}
+        with_api = FakeBackends(finding_nodes=[critical])
+        without_api = FakeBackends()
+
+        await post_webhooks(with_api, [payload])
+        await post_webhooks(without_api, [payload])
+
+        (order,) = with_api.find("servicenow", "POST", "/order_now")
+        variables = order.body["variables"]
+        self.assertEqual(variables["mondoo_risk_rating"], "CRITICAL")
+        self.assertEqual(variables["mondoo_risk_score"], "100")
+        # Ohne Wert der API bleibt der Befundtext als Rueckfall
+        (order,) = without_api.find("servicenow", "POST", "/order_now")
+        self.assertEqual(order.body["variables"]["mondoo_risk_rating"], "HIGH")
+
+    async def test_rejected_mondoo_query_is_logged_with_its_reason(self) -> None:
+        receiver_logger = logging.getLogger("mondoo-receiver")
+        receiver_logger.disabled = False
+        try:
+            with self.assertLogs(receiver_logger, level="ERROR") as captured:
+                (response,) = await post_webhooks(
+                    FakeBackends(mondoo_status=422),
+                    [load_fixture("case_created_vulnerability.json")],
+                )
+        finally:
+            receiver_logger.disabled = True
+
+        # Die Bewertung ist optional; das Ticket entsteht trotzdem
+        self.assertEqual(response.json()["action"], "created")
+        (log,) = [m for m in captured.output if "abgebrochen" in m]
+        self.assertIn('HTTP 422: Fields "cvss" conflict', log)
+        self.assertEqual(log.count("conflict because"), 1)
 
     async def test_closed_event_closes_open_ritm(self) -> None:
         payload = load_fixture("case_closed_misconfiguration.json")
