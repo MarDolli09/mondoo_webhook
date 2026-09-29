@@ -1,8 +1,10 @@
 # Project Context Handover
 
-Stand: 29.09.2026, Commit `7e4b3c5`. Der Fix für die von Mondoo abgelehnte
+Stand: 29.09.2026, Commit `c80a5e8`. Der Fix für die von Mondoo abgelehnte
 Abfrage (Abschnitt 3) ist **deployt und für alle drei Finding-Typen geprüft**
-(CVE, Fehlkonfiguration, End-of-Life).
+(CVE, Fehlkonfiguration, End-of-Life). Urgency/Impact beim Anlegen ist
+committet, die Prüfung am neuen RITM steht aus. **E-Mail-Alarmierung bei
+Fehlern ist eingerichtet** (Abschnitt 5, „Alarmierung").
 
 ## 1. Executive Summary & Project Goal
 
@@ -217,7 +219,7 @@ nicht „Mission-Critical".
   field", und der PATCH nach der Bestellung lässt Urgency/Impact bewusst weg
   (`build_create_fields`, Annahme vom 17.09., nie geprüft). Erst ein
   Update-Ereignis setzt die Felder (`build_update_fields`). **Umgesetzt am
-  29.09. (uncommittet, nicht deployt):** `build_create_fields` sendet
+  29.09. (`c80a5e8`):** `build_create_fields` sendet
   `urgency`/`impact` wie die Katalogvariablen, immer, auch bei Quelle
   `default`. Updates lassen die Felder bei Quelle `default` weiterhin
   unberührt, damit manuelle Änderungen erhalten bleiben. Noch offen: „Map to
@@ -318,6 +320,38 @@ beim Deployment sichtbar machen statt erst beim ersten Webhook.
 - **Python 3.9-kompatibel**, obwohl Azure 3.11 fährt, weil die lokale
   Entwicklungsumgebung noch 3.9 nutzt.
 
+**Alarmierung** (eingerichtet 29.09., Abonnement
+`MOS-lz-MondooSecurity-prod-gwc`, Ressourcengruppe `rg-mondoo-servicenow-prod-gwc`)
+
+| Bestandteil | Name | Zweck |
+|---|---|---|
+| Aktionsgruppe | `ag-mondoo-webhook-mail` (Kurzname `webhook-mail`) | eine E-Mail-Adresse |
+| Metrikalarm | „Mondoo-Webhook HTTP 5xx" | `Http5xx > 0`, 5 min; ServiceNow-Fehler (502) und unerwartete Fehler (500) |
+| Protokollsuche-Alarm | „Mondoo-Webhook - Fehler im Log" | Tabellenzeilen > 0, 5 min; zusätzlich Fehler mit HTTP 200 wie der Mondoo-422 |
+| Diagnoseeinstellung | `diag-console-to-log-analytics` → `log-mondoo-webhook` | nur „App Service Console Logs" |
+
+Beide Regeln: Schweregrad 2, automatisch auflösen. Abfrage der Log-Regel:
+
+```
+AppServiceConsoleLogs
+| where ResultDescription has "[ERROR]"
+    or ResultDescription has "Handled Exception [5"
+| project TimeGenerated, ResultDescription
+```
+
+- Die Spalte `Level` steht bei allen Konsolenzeilen auf „Informational"; gefiltert
+  wird deshalb über den Text `[ERROR]` im Log-Format. **Wer das Log-Format in
+  `app/core/logging.py` ändert, muss die Abfrage anpassen.**
+- Jede Log-Zeile ist eine eigene Zeile in der Tabelle (Tracebacks also mehrere);
+  Startmeldungen erscheinen doppelt, weil Gunicorn zwei Worker startet.
+- Log Analytics erfasst erst ab der Einrichtung und mit einigen Minuten Verzug;
+  die E-Mail der Log-Regel kommt etwa 5–10 min nach dem Fehler.
+- 401 (abgewiesene Zustellungen) lösen keinen Alarm aus: kein 5xx, im Log nur
+  WARNING.
+- Die App-Ressource heißt `app-mondoo-servicenow-webhook-prod`, spricht aber
+  derzeit `bmsptest` an. Beim Livegang bzw. bei getrennten Umgebungen die
+  Regeln für jede App-Ressource anlegen.
+
 **Betriebliche Randbedingungen**
 
 - Instanz-URL, Katalog-sys_id, Client-ID, Client Secret und Passwort gehören
@@ -373,9 +407,13 @@ beim Deployment sichtbar machen statt erst beim ersten Webhook.
 - [ ] Vor dem Livegang das Katalogformular auf `bmsp` prüfen: sys_id und
       Variablennamen. Bei Abweichung die Zuordnung konfigurierbar machen.
 - [ ] „Map to field" für `mondoo_mrn` auf `correlation_id` aktivieren.
-- [ ] Urgency/Impact beim Anlegen (Abschnitt 5): App-Änderung committen und
-      deployen, dann an einem neuen RITM prüfen, dass Impact/Urgency sofort
-      den Variablen entsprechen und ob Priority mitzieht.
+- [ ] Urgency/Impact beim Anlegen (Abschnitt 5, `c80a5e8`): deployen, dann an
+      einem neuen RITM prüfen, dass Impact/Urgency sofort den Variablen
+      entsprechen und ob Priority mitzieht.
+- [x] E-Mail-Alarmierung bei Fehlern eingerichtet (Abschnitt 5,
+      „Alarmierung").
+- [ ] Probe-E-Mail über „Aktionsgruppe testen" bestätigen; beim ersten echten
+      Alarm prüfen, dass die Mail mit Link zu den Log-Zeilen ankommt.
 - [ ] In ServiceNow „Map to field" für die Variablen `urgency` → Urgency und
       `impact` → Impact aktivieren (`bmsptest` und vor dem Livegang `bmsp`).
 - [ ] Optional: Getrennte Ressourcengruppen oder ein Deployment-Slot für Test
