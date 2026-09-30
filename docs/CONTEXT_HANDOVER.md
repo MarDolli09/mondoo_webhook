@@ -227,6 +227,54 @@ nicht „Mission-Critical".
   unberührt, damit manuelle Änderungen erhalten bleiben. Noch offen: „Map to
   field" in ServiceNow, damit die Werte schon bei der Bestellung stehen; ob
   ServiceNow die Priority am RITM aus Urgency/Impact neu berechnet.
+- **Neuen Space anbinden.** Am 30.09. erledigt für den Space *Server*
+  (`eu-nifty-mendeleev-113214`): eigene Webhook-Integration „ServiceNow“ auf
+  denselben Endpunkt, mit demselben Signing Secret und Auth-Header. Die
+  Zustellung um 16:59 (Ortszeit) scheiterte noch mit der alten Konfiguration.
+  Nach der Korrektur um 17:05 kam das Ticket von 17:06 durch. Bewährte
+  Schritte:
+  1. Diagnose: Jeder Request schreibt `request_completed` (ohne Methode,
+     Pfad und Status). Zustellungen an `/webhook/mondoo` zeigen zusätzlich
+     `WEBHOOK EMPFANGEN` oder `Webhook abgewiesen` (Grund in der Zeile). Ein
+     `request_completed` von ~1 ms ohne diese Zeilen bedeutet einen anderen
+     Pfad; `{"status":"online",…}` liefert nur `GET /`. Mondoo zeigt
+     Fehlschläge in der Integration unter „Most Recent Activity“
+     („webhook delivery failed“), in Ortszeit, Log Analytics dagegen in UTC.
+     Bei den Zeiten auf „Last Modified“ der Integration achten.
+     Kommt gar nichts an, hat Mondoo nichts gesendet: kein Case-Ereignis im
+     Space, Case läuft über eine andere Integration, oder die Integration ist
+     fehlerhaft. Unter „External Tickets“ zeigt Mondoo „Webhook <UUID>“, nicht
+     die RITM-Nummer. Die UUID ist vermutlich die `webhook-id` der
+     Anlage-Zustellung (steht in `WEBHOOK EMPFANGEN (webhook-id …)`); darüber
+     findet man im Log Correlation-ID und RITM (noch nicht bestätigt).
+  2. `MONDOO_API_KEY` braucht Lesezugriff auf den neuen Space, sonst Ticket
+     ohne CVSS/Risk plus ERROR und Alarm.
+  3. Space muss in der EU-Region liegen (`eu-…`), der GraphQL-Endpunkt ist
+     fest `eu.api.mondoo.com`.
+  4. Anzeigename in `CATEGORY_MAP` (`app/core/master_data.py`) ergänzen.
+- **Ausnahmen in Mondoo und Ticket-Abschluss.** Test am 30.09.: Ticket
+  „[CRITICAL] Mitigate vulnerability CVE-2026-64564 on Testserver-Ubuntu“
+  (18:07), danach Ausnahme „Test“ (exception-3, Risk Accepted, unbefristet,
+  18:09 genehmigt). Ergebnis: **Die Ausnahme nimmt das Finding sofort aus dem
+  Ticket (0 Findings, 0 Assets, 0/0 fixed), das Ticket bleibt aber offen.**
+  Ob es beim nächsten Scan schließt, ist noch offen. Vorgehen bis dahin: Ticket
+  nach genehmigter Ausnahme manuell in Mondoo schließen (`TYPE_CLOSED` schließt
+  das RITM). Alternative zur Entscheidung: Die Middleware schließt ein
+  leer gewordenes Ticket über die Mondoo-API (Schreibrecht und Mutation
+  prüfen). Das RITM selbst zu schließen, wäre inkonsistent zu Mondoo. Hintergrund: Mondoo
+  schließt Cases laut Release 11.22 automatisch, wenn alle Findings „resolved“
+  sind (Integration: „Automatically close tickets“ aktiv). Ob eine Ausnahme als
+  resolved zählt und wann Mondoo das neu bewertet (Recalculate bzw. nächster
+  cnspec-Scan), ist nicht dokumentiert. Der Fortschritt zählt behobene Assets,
+  eine Ausnahme ändert ihn vermutlich nicht. Laut Mondoo-Doku (Exceptions
+  Overview): Bei Risk Accepted, Workaround und False Positive läuft die
+  Prüfung weiter, das Finding zählt nur nicht zum Score. Bei Disable läuft die
+  Prüfung nicht mehr; für Schwachstellen fachlich unpassend. Neue Ausnahmen
+  stehen standardmäßig auf „Needs review“ und wirken erst nach Freigabe
+  (Space-Einstellung). Nach Ablauf der Frist zählt das Finding wieder; wegen
+  „Automatically create tickets: disabled“ entsteht dann kein neues Ticket.
+  Verbindliche Antwort nur über den Mondoo-Support. Die Middleware reagiert nur
+  auf `TYPE_CLOSED`; die Abschlussnotiz nennt Ausnahmen bereits.
 - **Short Description des Catalog Task** („Mondoo Vulnerability - Windows
   Clients") setzt der Flow/Workflow des Katalogelements, nicht die App. Die App
   schreibt nur `sc_req_item` (Short Description = `Mondoo - <Titel>` per PATCH
@@ -460,6 +508,22 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
       Log-Zeilen ankommt.
 - [ ] Optional: Integritätscheck des App Service auf `/` aktivieren und Alarm
       auf „Health check status" anlegen (Totalausfall, keine Zustellungen).
+- [x] Zweiten Space anbinden (Space *Server*, 30.09.; API-Key gilt für die
+      ganze Organisation, Space steht bereits in `CATEGORY_MAP`).
+- [x] Ausnahme getestet (30.09.): Finding verschwindet sofort aus dem
+      Ticket, das Ticket bleibt offen.
+- [ ] Nach dem nächsten Scan von Testserver-Ubuntu prüfen, ob Mondoo das
+      leere Ticket (CVE-2026-64564) schließt; im Log nachsehen, ob die
+      Ausnahme ein `TYPE_UPDATED` ausgelöst hat.
+- [ ] Prozess festlegen (Termin Vorgesetzter): Tickets nach genehmigter
+      Ausnahme manuell schließen oder automatisch über die Mondoo-API?
+      Umgang mit abgelaufenen Ausnahmen (kein automatisches neues Ticket)?
+- [ ] Protokollstream zeigt seit 30.09. „No new trace“, obwohl Log Analytics
+      Einträge hat: *App Service-Protokolle* (Anwendungsprotokollierung
+      Dateisystem) prüfen.
+- [ ] Optional: `request_completed` um Methode, Pfad (maskiert) und
+      Statuscode ergänzen (`app/main.py`), damit Fehlzustellungen sofort
+      erkennbar sind.
 - [ ] In ServiceNow „Map to field" für die Variablen `urgency` → Urgency und
       `impact` → Impact aktivieren (`bmsptest` und vor dem Livegang `bmsp`).
 - [ ] Optional: Getrennte Ressourcengruppen oder ein Deployment-Slot für Test
