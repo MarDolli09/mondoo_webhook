@@ -189,6 +189,8 @@ nicht „Mission-Critical".
 | `scripts/verify_scores.py` | Führt die Produktionsabfrage gegen die echte API aus; optional `<findingMrn> [scope …]`, misst die Dauer |
 | `scripts/introspect_next.py` | Introspektion für die offenen GraphQL-Kandidaten |
 | `README.md` | Ablauf, Mapping-Tabelle, Betrieb in Azure |
+| `docs/sequence-diagram.drawio` | Sequenzdiagramm des Ablaufs (App-Start, Webhook, Mondoo-API, ServiceNow, Alarmierung), editierbar in draw.io |
+| `docs/sequence-diagram.png` | Vorschau des Sequenzdiagramms; nach Änderungen in draw.io neu exportieren |
 
 ## 5. Open Issues, Edge Cases & Constraints
 
