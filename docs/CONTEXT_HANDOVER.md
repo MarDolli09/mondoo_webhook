@@ -330,15 +330,55 @@ beim Deployment sichtbar machen statt erst beim ersten Webhook.
 | Protokollsuche-Alarm | „Mondoo-Webhook - Fehler im Log" | Tabellenzeilen > 0, 5 min; zusätzlich Fehler mit HTTP 200 wie der Mondoo-422 |
 | Diagnoseeinstellung | `diag-console-to-log-analytics` → `log-mondoo-webhook` | nur „App Service Console Logs" |
 
-Beide Regeln: Schweregrad 2, automatisch auflösen. Abfrage der Log-Regel:
+Beide Regeln: Schweregrad 2, automatisch auflösen. Abfrage der Log-Regel
+(Stand 30.09.; die erste Fassung mit `has` griff bei `"Handled Exception [5"`
+nie, weil `has` nur ganze Begriffe vergleicht und „5" in „[502]" keiner ist):
 
 ```
 AppServiceConsoleLogs
-| where ResultDescription has "[ERROR]"
-    or ResultDescription has "Handled Exception [5"
+| where ResultDescription contains_cs "[ERROR]"
+    or ResultDescription contains_cs "[CRITICAL]"
+    or ResultDescription contains_cs "Traceback"
+    or ResultDescription contains_cs "Handled Exception [5"
+    or ResultDescription contains_cs "Handled Exception [422]"
+    or (ResultDescription contains_cs "Webhook abgewiesen"
+        and ResultDescription !contains_cs "Signatur-Header fehlen")
 | project TimeGenerated, ResultDescription
 ```
 
+Abgedeckt: jede 5xx-Antwort (Metrik, unabhängig vom Log), jede `[ERROR]`-Zeile
+(auch bei HTTP 200), Gunicorn-`[CRITICAL]` (z. B. `WORKER TIMEOUT`), Tracebacks
+ohne `[ERROR]` (z. B. Startabbruch bei fehlerhaften Einstellungen), 422
+(Payload von Mondoo nicht lesbar, sonst nur WARNING) und 401 **mit**
+Standard-Webhooks-Headern. Letzteres ist praktisch immer Mondoo mit
+veraltetem Signing Secret oder Auth-Header: Alle Zustellungen würden
+abgewiesen, ohne Ticket und ohne 5xx.
+
+Nicht abgedeckt, bewusst: 404/405 und 401 **ohne** Webhook-Header
+(„Signatur-Header fehlen", Scanner aus dem Internet; ein Alarm auf die Metrik
+„Http 4xx" wäre Dauerrauschen und kann Mondoo nicht von Bots unterscheiden)
+sowie WARNING-Zeilen. Nicht abgedeckt, offen: Wenn gar nichts ankommt (Mondoo sendet nicht mehr, App komplett
+ausgefallen), entsteht weder Fehler noch Log-Zeile. Absicherung wäre der
+App-Service-Integritätscheck auf `/` plus Alarm auf „Health check status".
+Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
+
+- **Alarmkette testen**, ohne Fehler auszulösen: vorübergehend zwei Regeln mit
+  derselben Aktionsgruppe anlegen: Metrik `Requests > 0` und Log-Abfrage
+  `AppServiceConsoleLogs | where ResultDescription contains_cs
+  "request_completed"`. Dann die Startseite `/` der App im Browser aufrufen.
+  Die Mails kommen nach ca. 5–10 bzw. 10–15 min. Test-Regeln danach löschen,
+  sonst lösen die Azure-eigenen Aufrufe laufend Mails aus. Keine falschen
+  Zugangsdaten zum Testen verwenden (geteiltes ServiceNow-Konto, Neustart der
+  App).
+- **Kosten** (Größenordnung, Listenpreise regional verschieden): Log-Regel
+  alle 5 min ca. 1,50 USD/Monat (alle 15 min ca. 0,50 USD), Metrikalarm
+  höchstens ca. 0,10 USD, E-Mails frei (1.000/Monat), Aufnahme ins Log
+  Analytics ca. 2,30–2,80 USD/GB bei geschätzt < 0,1 GB/Monat (erste 5 GB je
+  Abrechnungskonto frei), Aufbewahrung 30 Tage im Preis, Abfragen frei.
+  Zusammen ca. 1,50–2 USD/Monat. Ist-Werte: Arbeitsbereich → „Nutzung und
+  geschätzte Kosten" bzw. Kostenanalyse auf die Ressourcengruppe. Kein
+  Tageslimit setzen: Bei Erreichen stoppt die Aufnahme und die Log-Regel wird
+  blind.
 - Die Spalte `Level` steht bei allen Konsolenzeilen auf „Informational"; gefiltert
   wird deshalb über den Text `[ERROR]` im Log-Format. **Wer das Log-Format in
   `app/core/logging.py` ändert, muss die Abfrage anpassen.**
@@ -346,8 +386,6 @@ AppServiceConsoleLogs
   Startmeldungen erscheinen doppelt, weil Gunicorn zwei Worker startet.
 - Log Analytics erfasst erst ab der Einrichtung und mit einigen Minuten Verzug;
   die E-Mail der Log-Regel kommt etwa 5–10 min nach dem Fehler.
-- 401 (abgewiesene Zustellungen) lösen keinen Alarm aus: kein 5xx, im Log nur
-  WARNING.
 - Die App-Ressource heißt `app-mondoo-servicenow-webhook-prod`, spricht aber
   derzeit `bmsptest` an. Beim Livegang bzw. bei getrennten Umgebungen die
   Regeln für jede App-Ressource anlegen.
@@ -412,8 +450,14 @@ AppServiceConsoleLogs
       entsprechen und ob Priority mitzieht.
 - [x] E-Mail-Alarmierung bei Fehlern eingerichtet (Abschnitt 5,
       „Alarmierung").
-- [ ] Probe-E-Mail über „Aktionsgruppe testen" bestätigen; beim ersten echten
-      Alarm prüfen, dass die Mail mit Link zu den Log-Zeilen ankommt.
+- [x] E-Mail-Adresse der Aktionsgruppe bestätigt („Überprüft", 30.09.).
+- [ ] Abfrage der Log-Regel in Azure auf die `contains_cs`-Fassung inklusive
+      der 401-Bedingung umstellen (Abschnitt 5, „Alarmierung"). Vorher zählen,
+      wie viele Abweisungen mit bzw. ohne Webhook-Header vorkommen.
+- [ ] Beim ersten echten Alarm prüfen, dass die Mail mit Link zu den
+      Log-Zeilen ankommt.
+- [ ] Optional: Integritätscheck des App Service auf `/` aktivieren und Alarm
+      auf „Health check status" anlegen (Totalausfall, keine Zustellungen).
 - [ ] In ServiceNow „Map to field" für die Variablen `urgency` → Urgency und
       `impact` → Impact aktivieren (`bmsptest` und vor dem Livegang `bmsp`).
 - [ ] Optional: Getrennte Ressourcengruppen oder ein Deployment-Slot für Test
