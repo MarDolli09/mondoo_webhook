@@ -256,12 +256,14 @@ nicht „Mission-Critical".
   „[CRITICAL] Mitigate vulnerability CVE-2026-64564 on Testserver-Ubuntu“
   (18:07), danach Ausnahme „Test“ (exception-3, Risk Accepted, unbefristet,
   18:09 genehmigt). Ergebnis: **Die Ausnahme nimmt das Finding sofort aus dem
-  Ticket (0 Findings, 0 Assets, 0/0 fixed), das Ticket bleibt aber offen.**
-  Ob es beim nächsten Scan schließt, ist noch offen. Vorgehen bis dahin: Ticket
-  nach genehmigter Ausnahme manuell in Mondoo schließen (`TYPE_CLOSED` schließt
-  das RITM). Alternative zur Entscheidung: Die Middleware schließt ein
-  leer gewordenes Ticket über die Mondoo-API (Schreibrecht und Mutation
-  prüfen). Das RITM selbst zu schließen, wäre inkonsistent zu Mondoo. Hintergrund: Mondoo
+  Ticket (0 Findings, 0 Assets, 0/0 fixed); Mondoo schließt das leere Ticket
+  danach automatisch, aber mit Verzögerung.** Ende-zu-Ende bestätigt:
+  RITM0043042 (angelegt 18:07:42), `TYPE_CLOSED` von Mondoo um 16:20:05Z
+  (18:20 Ortszeit, rund 11 min nach der Freigabe), RITM um 18:20:06 auf
+  *Closed Complete* mit Arbeitsnotiz „CVSS: - (-) | Betroffene Assets: 0“. Ob
+  die Verzögerung vom Scan-Intervall oder einer periodischen Neubewertung
+  kommt, ist offen (letzter Scan des Assets 17:40). Manuelles Schließen
+  ist nicht nötig, eine Automatik in der Middleware auch nicht. Hintergrund: Mondoo
   schließt Cases laut Release 11.22 automatisch, wenn alle Findings „resolved“
   sind (Integration: „Automatically close tickets“ aktiv). Ob eine Ausnahme als
   resolved zählt und wann Mondoo das neu bewertet (Recalculate bzw. nächster
@@ -511,13 +513,11 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
 - [x] Zweiten Space anbinden (Space *Server*, 30.09.; API-Key gilt für die
       ganze Organisation, Space steht bereits in `CATEGORY_MAP`).
 - [x] Ausnahme getestet (30.09.): Finding verschwindet sofort aus dem
-      Ticket, das Ticket bleibt offen.
-- [ ] Nach dem nächsten Scan von Testserver-Ubuntu prüfen, ob Mondoo das
-      leere Ticket (CVE-2026-64564) schließt; im Log nachsehen, ob die
-      Ausnahme ein `TYPE_UPDATED` ausgelöst hat.
-- [ ] Prozess festlegen (Termin Vorgesetzter): Tickets nach genehmigter
-      Ausnahme manuell schließen oder automatisch über die Mondoo-API?
-      Umgang mit abgelaufenen Ausnahmen (kein automatisches neues Ticket)?
+      Ticket, Mondoo schließt das leere Ticket mit Verzögerung automatisch.
+- [x] RITM zum Test-Ticket (RITM0043042, CVE-2026-64564) per `TYPE_CLOSED`
+      geschlossen, rund 11 min nach Freigabe der Ausnahme (30.09.).
+- [ ] Prozess festlegen (Termin Vorgesetzter): Umgang mit abgelaufenen
+      Ausnahmen (Finding zählt wieder, aber kein automatisches neues Ticket).
 - [ ] Protokollstream zeigt seit 30.09. „No new trace“, obwohl Log Analytics
       Einträge hat: *App Service-Protokolle* (Anwendungsprotokollierung
       Dateisystem) prüfen.
