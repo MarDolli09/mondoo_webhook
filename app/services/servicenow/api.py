@@ -16,6 +16,7 @@ from app.core.logging import logger
 from app.services.servicenow.auth import ServiceNowAuth
 from app.services.servicenow.cache import ReferenceCache
 from app.services.servicenow.constants import (
+    CATALOG_TASK_LOOKUP_DELAYS,
     DEFAULT_MAX_RETRIES,
     PATH_ORDER_NOW,
     PATH_SUBMIT_ORDER,
@@ -23,6 +24,7 @@ from app.services.servicenow.constants import (
     PATH_TABLE_RECORD,
     RETRYABLE_STATUS,
     RITM_RESOLVE_DELAYS,
+    TABLE_CATALOG_TASK,
     TABLE_REQUEST_ITEM,
     TABLE_USER,
 )
@@ -100,6 +102,47 @@ class ServiceNowAPI:
             json_body=body,
             params={
                 "sysparm_fields": "sys_id,number,state,stage",
+                "sysparm_exclude_reference_link": "true",
+            },
+        )
+        record: dict[str, Any] = result.get("result") or {}
+        return record
+
+    # ------------------------------------------------------------------ #
+    # Catalog Tasks
+    # ------------------------------------------------------------------ #
+
+    async def find_assigned_catalog_tasks(
+        self, ritm_sys_id: str
+    ) -> list[dict[str, Any]]:
+        """SCTASKs eines RITM, sobald der Workflow die Assignment Group gesetzt hat.
+
+        Wartet zwischen den Versuchen; ohne zugeordneten Task bis zum Ende
+        eine leere Liste.
+        """
+        for delay in CATALOG_TASK_LOOKUP_DELAYS:
+            if delay:
+                await asyncio.sleep(delay)
+            records = await self._query_table(
+                TABLE_CATALOG_TASK,
+                query=f"request_item={ritm_sys_id}^assignment_groupISNOTEMPTY",
+                fields="sys_id,number,short_description",
+                limit=10,
+            )
+            if records:
+                return records
+        return []
+
+    async def patch_catalog_task(
+        self, task_sys_id: str, body: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Aktualisiert Felder eines SCTASK und liefert Nummer und Short Description."""
+        result = await self._request(
+            "PATCH",
+            PATH_TABLE_RECORD.format(table=TABLE_CATALOG_TASK, sys_id=task_sys_id),
+            json_body=body,
+            params={
+                "sysparm_fields": "sys_id,number,short_description",
                 "sysparm_exclude_reference_link": "true",
             },
         )

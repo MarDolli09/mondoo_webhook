@@ -290,13 +290,17 @@ nicht „Mission-Critical".
   `mondoo_space`. **Ein weiterer Workflow bestimmt daraus die Assignment
   Group**, der Text darf beim Anlegen also nicht geändert werden. Plan des
   Vorgesetzten (01.10.): Task normal anlegen lassen und die Short Description
-  kurz danach mit dem Tickettitel des RITM überschreiben. Umsetzung in der App
-  vorgeschlagen: nach dem RITM-PATCH `sc_task` mit `request_item` = RITM und
-  gesetzter Assignment Group suchen (kurz wiederholen), nur Tasks mit Text
-  „Mondoo Vulnerability…“ überschreiben, bei Zeitüberschreitung Warnung.
-  Vorher beim Admin klären: Rechte von `mosca.rest` auf `sc_task`, Zeitpunkt
-  der Gruppenzuordnung, keine Neuberechnung bei Änderung der Short
-  Description. Bisheriger Stand dazu: Der Flow/Workflow des
+  kurz danach mit dem Tickettitel des RITM überschreiben. **Umgesetzt am 01.10.
+  (noch nicht deployt):** `ServiceNowClient._retitle_catalog_tasks` sucht nach
+  dem RITM-PATCH `sc_task` mit `request_item` = RITM und
+  `assignment_groupISNOTEMPTY` (Wartezeiten `CATALOG_TASK_LOOKUP_DELAYS` =
+  0/1/2/3 s, also maximal rund 6 s) und ersetzt nur Short Descriptions, die mit
+  `CATALOG_TASK_WORKFLOW_TITLE_PREFIX` („Mondoo Vulnerability“) beginnen.
+  Kein zugeordneter Task oder ein Fehler (etwa 403): WARNING, RITM und
+  Webhook-Antwort bleiben unberührt. Nur beim Anlegen; Updates fassen den Task
+  nicht an. Beim Admin weiterhin bestätigen lassen: Rechte von `mosca.rest`
+  auf `sc_task`, Zeitpunkt der Gruppenzuordnung (innerhalb der 6 s?), keine
+  Neuberechnung der Gruppe bei Änderung der Short Description. Bisheriger Stand dazu: Der Flow/Workflow des
   Katalogelements setzt den Text, nicht die App. Die App
   schreibt nur `sc_req_item` (Short Description = Tickettitel per PATCH
   nach der Bestellung). Seit `mondoo_title` entfallen ist, kann der Flow den
@@ -578,10 +582,13 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
 - [x] `mondoo_title` aus dem Code gestrichen (01.10.).
 - [ ] Feld *Mondoo Title* aus dem Katalogformular entfernen (`bmsptest`, vor
       dem Livegang `bmsp`).
-- [ ] SCTASK-Titel: beim Admin Rechte (`sc_task` lesen/schreiben), Zeitpunkt
-      der Assignment Group und fehlende Neuberechnung bestätigen lassen, dann
-      Überschreiben in der App umsetzen (Abschnitt 5, „Short Description des
-      Catalog Task“).
+- [x] SCTASK-Titel nach der Gruppenzuordnung überschreiben, in der App
+      umgesetzt (01.10., Abschnitt 5, „Short Description des Catalog Task“).
+- [ ] Beim Admin bestätigen lassen: Rechte von `mosca.rest` auf `sc_task`,
+      Gruppenzuordnung innerhalb von ~6 s, keine Neuberechnung bei geänderter
+      Short Description. Nach dem Deployment am neuen RITM prüfen: SCTASK hat
+      den Tickettitel **und** die richtige Assignment Group; im Log
+      `SCTASK …: '…' durch Tickettitel ersetzt.`
 - [ ] In ServiceNow „Map to field" für die Variablen `urgency` → Urgency und
       `impact` → Impact aktivieren (`bmsptest` und vor dem Livegang `bmsp`).
 - [ ] Optional: Getrennte Ressourcengruppen oder ein Deployment-Slot für Test

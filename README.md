@@ -52,6 +52,12 @@ Katalogformular „Mondoo Vulnerability“ (`order_now`), Reihenfolge wie im For
 RITM-Felder per PATCH nach der Bestellung: `state` (1), `correlation_id`,
 `short_description` (= Titel), `urgency`/`impact` (wie die Katalogvariablen),
 `opened_by` (`mosca.rest`), `watch_list`, `work_notes`.
+
+Danach bekommt der SCTASK den Tickettitel: Der Workflow legt ihn mit
+„Mondoo Vulnerability - <Space>“ an und bestimmt daraus die Assignment Group.
+Die App sucht bis zu rund 6 s nach Tasks zum RITM mit gesetzter Assignment
+Group und ersetzt nur diesen Workflow-Text. Gelingt das nicht, bleibt der Task
+unverändert (WARNING im Log), das RITM ist davon nicht betroffen.
 Folgeereignisse aktualisieren `work_notes`,
 bei ermittelter Priorität `urgency`/`impact` und schließen bei Close/Delete.
 

@@ -3,18 +3,23 @@
 from typing import Any, Optional
 
 from app.core.config import settings
+from app.core.exceptions import ServiceNowAPIError
 from app.core.logging import logger
 from app.core.master_data import SNOW_INTEGRATION_USER
 from app.domain.ports import TicketSynchronizer
 from app.models.case import NormalizedCase
 from app.models.mondoo import CLOSING_EVENTS
 from app.services.servicenow.api import ServiceNowAPI
-from app.services.servicenow.constants import TERMINAL_STATES
+from app.services.servicenow.constants import (
+    CATALOG_TASK_WORKFLOW_TITLE_PREFIX,
+    TERMINAL_STATES,
+)
 from app.services.servicenow.mapping import (
     build_catalog_variables,
     build_create_fields,
     build_update_fields,
     correlation_id,
+    ticket_title,
     watcher_identifiers,
 )
 
@@ -85,6 +90,8 @@ class ServiceNowClient(TicketSynchronizer):
         number = updated.get("number") or ritm.get("number")
         logger.info(f"RITM {number} schlank angelegt (Status: Offen).")
 
+        await self._retitle_catalog_tasks(ritm_sys_id, str(number), ticket_title(case))
+
         return {
             **updated,
             "number": number,
@@ -92,6 +99,46 @@ class ServiceNowClient(TicketSynchronizer):
             "request_sys_id": request_sys_id,
             "action": "created",
         }
+
+    async def _retitle_catalog_tasks(
+        self, ritm_sys_id: str, ritm_number: str, title: str
+    ) -> None:
+        """Ersetzt den Workflow-Text der SCTASKs durch den Tickettitel.
+
+        Ein Workflow bestimmt die Assignment Group aus "Mondoo Vulnerability -
+        <Space>"; ueberschrieben wird deshalb erst, wenn die Gruppe gesetzt ist.
+        Scheitert das, bleibt der Task wie vom Workflow angelegt, das RITM ist
+        davon nicht betroffen.
+        """
+        try:
+            tasks = await self._api.find_assigned_catalog_tasks(ritm_sys_id)
+            if not tasks:
+                logger.warning(
+                    f"Kein SCTASK mit Assignment Group zu RITM {ritm_number} "
+                    f"gefunden. Die Short Description des Tasks bleibt unveraendert."
+                )
+                return
+
+            for task in tasks:
+                current = str(task.get("short_description") or "")
+                if not current.startswith(CATALOG_TASK_WORKFLOW_TITLE_PREFIX):
+                    logger.info(
+                        f"SCTASK {task.get('number')} traegt bereits '{current}' "
+                        f"und bleibt unveraendert."
+                    )
+                    continue
+                await self._api.patch_catalog_task(
+                    task["sys_id"], {"short_description": title}
+                )
+                logger.info(
+                    f"SCTASK {task.get('number')}: '{current}' durch Tickettitel "
+                    f"ersetzt."
+                )
+        except ServiceNowAPIError as exc:
+            logger.warning(
+                f"Short Description der SCTASKs zu RITM {ritm_number} nicht "
+                f"gesetzt: {exc.message}"
+            )
 
     async def _resolve_opened_by(self) -> Optional[str]:
         sys_id = await self._api.resolve_user_sys_id(SNOW_INTEGRATION_USER)

@@ -90,12 +90,24 @@ class FakeBackends:
         default_factory=dict
     )
     finding_nodes: list[dict[str, Any]] = field(default_factory=list)
+    # SCTASKs, die der Workflow zum neuen RITM anlegt (mit Assignment Group)
+    catalog_tasks: list[dict[str, Any]] = field(
+        default_factory=lambda: [
+            {
+                "sys_id": "task-1",
+                "number": "SCTASK0100001",
+                "short_description": "Mondoo Vulnerability - Server",
+                "assignment_group": "grp-server",
+            }
+        ]
+    )
     requests: list[RecordedRequest] = field(default_factory=list)
     token_fetches: int = 0
     mondoo_status: int = 200
     token_status: int = 200
     lookup_status: int = 200
     order_status: int = 200
+    task_status: int = 200
 
     def transport(self) -> httpx.MockTransport:
         """httpx-Transport, der alle Requests an diese Attrappen leitet."""
@@ -160,15 +172,7 @@ class FakeBackends:
     ) -> httpx.Response:
         query = params.get("sysparm_query", "")
         if path == "/oauth_token.do":
-            self.token_fetches += 1
-            if self.token_status != 200:
-                oauth_error = {
-                    "error": "server_error",
-                    "error_description": "access_denied",
-                }
-                return httpx.Response(self.token_status, json=oauth_error)
-            token = {"access_token": f"tok-{self.token_fetches}", "expires_in": 1800}
-            return httpx.Response(200, json=token)
+            return self._token()
         if self.lookup_status != 200 and query.startswith("correlation_id="):
             return httpx.Response(self.lookup_status, json={"error": "simuliert"})
         if path == "/api/now/table/sc_req_item" and query.startswith("correlation_id="):
@@ -178,6 +182,8 @@ class FakeBackends:
         if path == "/api/now/table/sc_req_item" and query.startswith("request="):
             ritm = {"sys_id": "ritm-new", "number": "RITM0100001"}
             return httpx.Response(200, json={"result": [ritm]})
+        if path.startswith("/api/now/table/sc_task"):
+            return self._catalog_tasks(method, path, query, body)
         if path == "/api/now/table/sys_user":
             identifier = query.split("^")[0].split("=", 1)[1]
             return httpx.Response(
@@ -200,6 +206,33 @@ class FakeBackends:
             result = {"sys_id": sys_id, "number": "RITM0100001", "state": state}
             return httpx.Response(200, json={"result": result})
         return httpx.Response(404, json={"error": f"nicht gemockt: {method} {path}"})
+
+    def _token(self) -> httpx.Response:
+        self.token_fetches += 1
+        if self.token_status != 200:
+            oauth_error = {
+                "error": "server_error",
+                "error_description": "access_denied",
+            }
+            return httpx.Response(self.token_status, json=oauth_error)
+        token = {"access_token": f"tok-{self.token_fetches}", "expires_in": 1800}
+        return httpx.Response(200, json=token)
+
+    def _catalog_tasks(
+        self, method: str, path: str, query: str, body: Any
+    ) -> httpx.Response:
+        if self.task_status != 200:
+            return httpx.Response(self.task_status, json={"error": "simuliert"})
+        if method == "GET":
+            # Wie ServiceNow: nur Tasks, deren Assignment Group schon gesetzt ist
+            assigned = [t for t in self.catalog_tasks if t.get("assignment_group")]
+            if "assignment_groupISNOTEMPTY" not in query:
+                assigned = list(self.catalog_tasks)
+            return httpx.Response(200, json={"result": assigned})
+        sys_id = path.rsplit("/", 1)[1]
+        task = next(t for t in self.catalog_tasks if t["sys_id"] == sys_id)
+        task.update(body or {})
+        return httpx.Response(200, json={"result": task})
 
 
 async def post_webhooks(

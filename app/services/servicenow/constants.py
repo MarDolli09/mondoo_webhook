@@ -1,6 +1,8 @@
 """Feste Werte der ServiceNow-Instanz: Zustaende, Feldgrenzen, Tabellen, Pfade."""
 
 __all__ = [
+    "CATALOG_TASK_LOOKUP_DELAYS",
+    "CATALOG_TASK_WORKFLOW_TITLE_PREFIX",
     "CORRELATION_ID_MAX",
     "DEFAULT_MAX_RETRIES",
     "PATH_OAUTH_TOKEN",
@@ -15,6 +17,7 @@ __all__ = [
     "STATE_CLOSED_INCOMPLETE",
     "STATE_CLOSED_SKIPPED",
     "STATE_OPEN",
+    "TABLE_CATALOG_TASK",
     "TABLE_REQUEST_ITEM",
     "TABLE_USER",
     "TERMINAL_STATES",
@@ -51,6 +54,14 @@ DEFAULT_MAX_RETRIES = 3
 # Sekunden zwischen den Aufloesungsversuchen.
 RITM_RESOLVE_DELAYS = (0.0, 0.5, 1.0, 2.0)
 
+# Ein Workflow legt den SCTASK mit "Mondoo Vulnerability - <Space>" an und
+# bestimmt daraus die Assignment Group. Erst danach darf der Tickettitel den
+# Text ersetzen. Wartezeiten in Sekunden zwischen den Suchen (maximal 6 s).
+CATALOG_TASK_LOOKUP_DELAYS = (0.0, 1.0, 2.0, 3.0)
+# Nur Tasks mit dem Text des Workflows werden ueberschrieben; von Hand
+# geaenderte Short Descriptions bleiben erhalten.
+CATALOG_TASK_WORKFLOW_TITLE_PREFIX = "Mondoo Vulnerability"
+
 # Sicherheitsmarge in Sekunden, damit kein OAuth-Token mitten im Vorgang ablaeuft
 TOKEN_EXPIRY_MARGIN_SECONDS = 60.0
 
@@ -58,6 +69,7 @@ TOKEN_EXPIRY_MARGIN_SECONDS = 60.0
 # Tabellen und Endpunkt-Pfade
 # ---------------------------------------------------------------------- #
 TABLE_REQUEST_ITEM = "sc_req_item"
+TABLE_CATALOG_TASK = "sc_task"
 TABLE_USER = "sys_user"
 
 PATH_TABLE = "/api/now/table/{table}"

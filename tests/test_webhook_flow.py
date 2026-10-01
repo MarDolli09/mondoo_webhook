@@ -5,6 +5,7 @@ import logging
 import os
 import time
 import unittest
+from unittest import mock
 
 import httpx
 
@@ -56,6 +57,73 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(backends.find("servicenow", "GET", "sys_user_group"), [])
         self.assertNotIn("sysparm_requested_for", order.body)
+
+    async def test_catalog_task_gets_ticket_title_after_assignment(self) -> None:
+        backends = FakeBackends(finding_nodes=[CVE_NODE])
+        backends.catalog_tasks.append(
+            {
+                "sys_id": "task-2",
+                "number": "SCTASK0100002",
+                "short_description": "Von Hand geaendert",
+                "assignment_group": "grp-server",
+            }
+        )
+
+        (response,) = await post_webhooks(
+            backends, [load_fixture("case_created_vulnerability.json")]
+        )
+
+        self.assertEqual(response.json()["action"], "created")
+        # Gesucht wird erst nach Tasks, deren Assignment Group schon steht
+        (lookup,) = backends.find("servicenow", "GET", "/sc_task")
+        self.assertEqual(
+            lookup.params["sysparm_query"],
+            "request_item=ritm-new^assignment_groupISNOTEMPTY",
+        )
+        # Nur der Task mit dem Text des Workflows bekommt den Tickettitel
+        (patch,) = backends.find("servicenow", "PATCH", "/sc_task/")
+        self.assertTrue(patch.path.endswith("/task-1"))
+        self.assertEqual(
+            patch.body, {"short_description": "Mondoo - [CRITICAL] CVE-2024-0056"}
+        )
+
+    async def test_catalog_task_without_assignment_group_keeps_workflow_title(
+        self,
+    ) -> None:
+        backends = FakeBackends()
+        backends.catalog_tasks[0]["assignment_group"] = ""
+        receiver_logger = logging.getLogger("mondoo-receiver")
+        receiver_logger.disabled = False
+        try:
+            with (
+                mock.patch(
+                    "app.services.servicenow.api.CATALOG_TASK_LOOKUP_DELAYS", (0.0, 0.0)
+                ),
+                self.assertLogs(receiver_logger, level="WARNING") as captured,
+            ):
+                (response,) = await post_webhooks(
+                    backends, [load_fixture("case_created_vulnerability.json")]
+                )
+        finally:
+            receiver_logger.disabled = True
+
+        self.assertEqual(response.json()["action"], "created")
+        self.assertEqual(len(backends.find("servicenow", "GET", "/sc_task")), 2)
+        self.assertEqual(backends.find("servicenow", "PATCH", "/sc_task/"), [])
+        self.assertTrue(
+            any("Kein SCTASK mit Assignment Group" in m for m in captured.output)
+        )
+
+    async def test_catalog_task_errors_do_not_fail_the_webhook(self) -> None:
+        # Etwa fehlende Rechte von mosca.rest auf sc_task
+        backends = FakeBackends(task_status=403)
+
+        (response,) = await post_webhooks(
+            backends, [load_fixture("case_created_vulnerability.json")]
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["action"], "created")
 
     async def test_risk_from_api_takes_precedence_over_summary_text(self) -> None:
         payload = load_fixture("case_created_vulnerability.json")
