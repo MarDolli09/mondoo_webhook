@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
@@ -9,10 +10,10 @@ from zoneinfo import ZoneInfo
 from fastapi import Request
 
 from app.core.logging import logger
-from app.models.case import NormalizedCase
 from app.models.mondoo import MondooWebhookEvent
+from app.services.processing import ProcessingResult
 
-__all__ = ["InboundHeaderSampler", "build_telemetry_record"]
+__all__ = ["DeliveryContext", "InboundHeaderSampler", "build_telemetry_record"]
 
 TELEMETRY_EVENT = "mondoo_to_servicenow_processed"
 LOCAL_TIMEZONE = ZoneInfo("Europe/Berlin")
@@ -47,31 +48,37 @@ class InboundHeaderSampler:
         logger.info(json.dumps({"event": "inbound_headers_sample", "headers": safe}))
 
 
+@dataclass(frozen=True)
+class DeliveryContext:
+    """Angaben zur Zustellung, die nicht aus der Verarbeitung stammen."""
+
+    webhook_id: str
+    correlation_id: Optional[str]
+    received_at: datetime
+
+
 def build_telemetry_record(
-    *,
-    finding_type: str,
-    event: MondooWebhookEvent,
-    case: NormalizedCase,
-    servicenow_record: dict[str, Any],
-    parse_ms: float,
-    servicenow_ms: float,
-    received_at: datetime,
-    correlation_id: Optional[str],
-    webhook_id: str,
+    result: ProcessingResult, event: MondooWebhookEvent, context: DeliveryContext
 ) -> dict[str, Any]:
-    """Ein JSON-Datensatz je verarbeitetem Webhook fuer die Auswertung."""
+    """Ein JSON-Datensatz je verarbeitetem Webhook fuer die Auswertung.
+
+    Die Feldnamen werden in Log Analytics ausgewertet und bleiben stabil.
+    """
+    case = result.case
+    outcome = result.outcome
+    received_at = context.received_at
     mondoo_created_at = event.case.created_at
     return {
         "event": TELEMETRY_EVENT,
-        "ticket_type": finding_type,
+        "ticket_type": result.finding_type,
         "mondoo_event": case.raw_event_type,
         "mapped_event": case.event_type.value,
         "case_status": case.case_status or None,
         "creator": case.created_by or None,
-        "snow_action": servicenow_record.get("action"),
-        "servicenow_ritm": servicenow_record.get("number"),
-        "servicenow_sys_id": servicenow_record.get("sys_id"),
-        "priority_source": case.priority_source,
+        "snow_action": outcome.action.value,
+        "servicenow_ritm": outcome.ticket_number,
+        "servicenow_sys_id": outcome.ticket_id,
+        "priority_source": case.priority_source.value,
         "urgency": case.urgency,
         "impact": case.impact,
         "cvss_score": case.cvss_score or None,
@@ -80,15 +87,15 @@ def build_telemetry_record(
         "risk_score": case.risk_score or None,
         "assets_reported": event.case.assets_count,
         "is_automated": case.is_automated,
-        "parse_duration_ms": parse_ms,
-        "servicenow_duration_ms": servicenow_ms,
+        "parse_duration_ms": result.parse_ms,
+        "servicenow_duration_ms": result.servicenow_ms,
         "mondoo_created_at": mondoo_created_at,
         "webhook_received_at_utc": received_at.isoformat(),
         "webhook_received_at_local": received_at.astimezone(LOCAL_TIMEZONE).isoformat(),
         "latency_seconds": _latency_seconds(mondoo_created_at, received_at),
         "case_mrn": case.mrn,
-        "correlation_id": correlation_id,
-        "webhook_id": webhook_id,
+        "correlation_id": context.correlation_id,
+        "webhook_id": context.webhook_id,
     }
 
 

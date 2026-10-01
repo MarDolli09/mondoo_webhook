@@ -1,34 +1,22 @@
-"""Finding-Typen: Klassifikation ueber die Finding-MRN und Verarbeitungsprofile."""
+"""Finding-Typen: Klassifikation ueber die Finding-MRN und Typ im Ticket."""
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
 
 __all__ = [
     "DEFAULT_FINDING_TYPE",
-    "FindingTypeProfile",
+    "REPORTED_FINDING_TYPES",
     "classify_finding_type",
-    "profile_for",
+    "reported_finding_type",
 ]
 
 DEFAULT_FINDING_TYPE = "other"
 
-
-@dataclass(frozen=True)
-class FindingTypeProfile:
-    """Wie ein Finding-Typ an ServiceNow gemeldet wird."""
-
-    servicenow_type: str
-
-
-_PROFILES: Mapping[str, FindingTypeProfile] = {
-    "vulnerability": FindingTypeProfile("vulnerability"),
-    "advisories": FindingTypeProfile("advisories"),
-    # End-of-Life-Befunde werden als eigener Typ gemeldet.
-    "end-of-life": FindingTypeProfile("end-of-life"),
-    # Fehlkonfigurationen tragen kein CVSS, nur ein Mondoo Risk Rating.
-    "misconfiguration": FindingTypeProfile("misconfiguration"),
-}
-_DEFAULT_PROFILE = FindingTypeProfile(DEFAULT_FINDING_TYPE)
+# Typen, die im Ticket unter eigenem Namen erscheinen. End-of-Life-Befunde sind
+# Advisories, werden aber als eigener Typ gemeldet; Fehlkonfigurationen tragen
+# kein CVSS, nur ein Mondoo Risk Rating.
+REPORTED_FINDING_TYPES = frozenset(
+    {"vulnerability", "advisories", "end-of-life", "misconfiguration"}
+)
 
 
 def classify_finding_type(
@@ -42,6 +30,8 @@ def classify_finding_type(
     return DEFAULT_FINDING_TYPE
 
 
-def profile_for(finding_type: str) -> FindingTypeProfile:
-    """Verarbeitungsprofil eines Typs; unbekannte Typen erhalten das Standardprofil."""
-    return _PROFILES.get(finding_type, _DEFAULT_PROFILE)
+def reported_finding_type(finding_type: str) -> str:
+    """Typ fuer das Ticket; unbekannte Typen erscheinen als ``other``."""
+    if finding_type in REPORTED_FINDING_TYPES:
+        return finding_type
+    return DEFAULT_FINDING_TYPE

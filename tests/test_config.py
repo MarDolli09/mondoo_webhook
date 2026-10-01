@@ -4,32 +4,34 @@ import os
 import subprocess
 import sys
 import unittest
-from pathlib import Path
 
 from pydantic import SecretStr
 
-import tests  # noqa: F401  (Dummy-Umgebung)
+import tests  # noqa: F401  (Dummy-Umgebung, vor jedem app-Import)
 from app.core.config import Settings
+from tests import ROOT_DIR, isolated_env
 
-ROOT = Path(__file__).resolve().parent.parent
 SECRET = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkdW1teSJ9.geheimes-signatur-ende-4711"
+TEST_ENV_FILE = str(ROOT_DIR / "tests" / ".env.test")
+
+
+def start_config(**env: str) -> "subprocess.CompletedProcess[str]":
+    """Importiert ``app.core.config`` in einem frischen Prozess mit genau ``env``."""
+    return subprocess.run(
+        [sys.executable, "-c", "import app.core.config"],
+        cwd=ROOT_DIR / "tests",
+        env=isolated_env(**env),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
 
 
 class SettingsStartupTest(unittest.TestCase):
     def test_missing_variables_are_named_without_leaking_secrets(self) -> None:
-        env = {
-            "PATH": os.environ.get("PATH", ""),
-            "PYTHONPATH": str(ROOT),
-            "APP_ENV_FILE": str(ROOT / "tests" / "does-not-exist.env"),
-            "MONDOO_API_KEY": SECRET,
-        }
-        result = subprocess.run(
-            [sys.executable, "-c", "import app.core.config"],
-            cwd=ROOT / "tests",
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
+        result = start_config(
+            APP_ENV_FILE=str(ROOT_DIR / "tests" / "does-not-exist.env"),
+            MONDOO_API_KEY=SECRET,
         )
 
         self.assertNotEqual(result.returncode, 0)
@@ -39,19 +41,9 @@ class SettingsStartupTest(unittest.TestCase):
         self.assertNotIn("eyJhb", result.stderr)
 
     def test_invalid_signing_secret_fails_start_without_leaking_it(self) -> None:
-        env = {
-            "PATH": os.environ.get("PATH", ""),
-            "PYTHONPATH": str(ROOT),
-            "APP_ENV_FILE": str(ROOT / "tests" / ".env.test"),
-            "MONDOO_WEBHOOK_SIGNING_SECRET": "kein-whsec-geheimwert-4711",
-        }
-        result = subprocess.run(
-            [sys.executable, "-c", "import app.core.config"],
-            cwd=ROOT / "tests",
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
+        result = start_config(
+            APP_ENV_FILE=TEST_ENV_FILE,
+            MONDOO_WEBHOOK_SIGNING_SECRET="kein-whsec-geheimwert-4711",
         )
 
         self.assertNotEqual(result.returncode, 0)
@@ -60,19 +52,9 @@ class SettingsStartupTest(unittest.TestCase):
         self.assertNotIn("geheimwert-4711", result.stderr)
 
     def test_token_in_header_name_setting_fails_start_without_leaking_it(self) -> None:
-        env = {
-            "PATH": os.environ.get("PATH", ""),
-            "PYTHONPATH": str(ROOT),
-            "APP_ENV_FILE": str(ROOT / "tests" / ".env.test"),
-            "MONDOO_WEBHOOK_AUTH_HEADER": "Bearer geheimes-token-4711",
-        }
-        result = subprocess.run(
-            [sys.executable, "-c", "import app.core.config"],
-            cwd=ROOT / "tests",
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
+        result = start_config(
+            APP_ENV_FILE=TEST_ENV_FILE,
+            MONDOO_WEBHOOK_AUTH_HEADER="Bearer geheimes-token-4711",
         )
 
         self.assertNotEqual(result.returncode, 0)
@@ -85,20 +67,7 @@ class SettingsStartupTest(unittest.TestCase):
             "http://instanz.service-now.com",
             "instanz.service-now.com",
         ):
-            env = {
-                "PATH": os.environ.get("PATH", ""),
-                "PYTHONPATH": str(ROOT),
-                "APP_ENV_FILE": str(ROOT / "tests" / ".env.test"),
-                "SNOW_INSTANCE_URL": url,
-            }
-            result = subprocess.run(
-                [sys.executable, "-c", "import app.core.config"],
-                cwd=ROOT / "tests",
-                env=env,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
+            result = start_config(APP_ENV_FILE=TEST_ENV_FILE, SNOW_INSTANCE_URL=url)
             with self.subTest(url):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("ohne Pfad wie /oauth_token.do", result.stderr)
@@ -110,20 +79,7 @@ class SettingsStartupTest(unittest.TestCase):
             "SNOW_USER": ("  ", "SNOW_USER darf nicht leer sein"),
         }
         for name, (value, expected_hint) in invalid.items():
-            env = {
-                "PATH": os.environ.get("PATH", ""),
-                "PYTHONPATH": str(ROOT),
-                "APP_ENV_FILE": str(ROOT / "tests" / ".env.test"),
-                name: value,
-            }
-            result = subprocess.run(
-                [sys.executable, "-c", "import app.core.config"],
-                cwd=ROOT / "tests",
-                env=env,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
+            result = start_config(APP_ENV_FILE=TEST_ENV_FILE, **{name: value})
             with self.subTest(name):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(name, result.stderr)

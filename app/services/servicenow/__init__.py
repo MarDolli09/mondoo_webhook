@@ -4,5 +4,12 @@ from app.services.servicenow.api import ServiceNowAPI
 from app.services.servicenow.auth import ServiceNowAuth
 from app.services.servicenow.cache import ReferenceCache
 from app.services.servicenow.client import ServiceNowClient
+from app.services.servicenow.config import ServiceNowConfig
 
-__all__ = ["ReferenceCache", "ServiceNowAPI", "ServiceNowAuth", "ServiceNowClient"]
+__all__ = [
+    "ReferenceCache",
+    "ServiceNowAPI",
+    "ServiceNowAuth",
+    "ServiceNowClient",
+    "ServiceNowConfig",
+]

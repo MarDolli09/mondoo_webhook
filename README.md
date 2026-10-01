@@ -64,12 +64,20 @@ bei ermittelter Priorität `urgency`/`impact` und schließen bei Close/Delete.
 ## Architektur
 
 ```
-app/api        HTTP-Endpunkt, Lifespan, Abhängigkeiten, Telemetrie
-app/services   mondoo (Findings-Abfrage) · parsing (CaseParser) · servicenow (RITM)
-app/domain     Fachregeln ohne I/O, Schnittstellen FindingScoresLookup / TicketSynchronizer
+app/api        HTTP-Endpunkt, Authentifizierung, Lifespan/Startpunkt, Telemetrie
+app/services   processing (Anwendungsablauf) · parsing (CaseParser)
+               mondoo (Bewertungen) · servicenow (RITM, SCTASK)
+app/domain     Fachregeln ohne I/O, Ports FindingScoresLookup / TicketSynchronizer
 app/models     Eingangsmodell (Mondoo) und NormalizedCase
 app/core       Konfiguration, Stammdaten, Logging, Ausnahmen
 ```
+
+Ablauf je Zustellung: `app/api/webhook.py` authentifiziert und dekodiert,
+`WebhookProcessor` (`app/services/processing`) klassifiziert, normalisiert über
+`CaseParser` und synchronisiert über den Port `TicketSynchronizer`; das Ergebnis
+ist ein `SyncOutcome` (Aktion, Ticketnummer). Das ServiceNow-Teilsystem trennt
+den Transport (`transport.py`: Anmeldung, Retry, Fehlerabbildung) von den
+Ressourcen (`request_items`, `catalog_tasks`, `catalog`, `users`).
 
 Importregeln (durch `tests/test_architecture.py` geprüft):
 
@@ -77,6 +85,9 @@ Importregeln (durch `tests/test_architecture.py` geprüft):
 * Teilsysteme (`app.api`, `app.services.*`) werden von außen nur über ihre
   `__init__.py` importiert.
 * `app.domain` und `app.models` sind ohne Umgebungsvariablen importierbar.
+* Die Teilsysteme unter `app.services` lesen weder `settings` noch
+  `master_data`; `app/api/dependencies.py` übergibt ihnen `ServiceNowConfig`
+  bzw. `ParsingConfig`.
 
 ## Betrieb in Azure
 
@@ -91,8 +102,10 @@ Importregeln (durch `tests/test_architecture.py` geprüft):
 ## Konfiguration
 
 Technische Einstellungen: `app/core/config.py`. Fachliche Stammdaten
-(Spaces, Benutzer, Prioritäten, Finding-Typen, feste Beobachter):
-`app/core/master_data.py`. Vorlage aller Variablen: `.env.example`.
+(Spaces, Benutzer, Prioritäten, Finding-Typen): `app/core/master_data.py`.
+Feste Organisationsdaten der Anbindung (technischer Benutzer, feste
+Beobachter): `app/services/servicenow/constants.py`. Vorlage aller Variablen:
+`.env.example`.
 
 ## Entwicklung
 
@@ -107,4 +120,5 @@ ruff format . && ruff check . && mypy                     # Standards (pyproject
 
 Die Tests laden `tests/.env.test` (Dummy-Werte) und simulieren Mondoo und
 ServiceNow; es werden keine externen Systeme aufgerufen. Anwendungslogs im
-Testlauf: `TEST_LOGS=1`.
+Testlauf: `TEST_LOGS=1`. Die Suite läuft unter Linux, macOS und Windows; unter
+Windows wird dafür `tzdata` mitinstalliert (Marker in `requirements.txt`).

@@ -97,7 +97,8 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
         try:
             with (
                 mock.patch(
-                    "app.services.servicenow.api.CATALOG_TASK_LOOKUP_DELAYS", (0.0, 0.0)
+                    "app.services.servicenow.catalog_tasks.CATALOG_TASK_LOOKUP_DELAYS",
+                    (0.0, 0.0),
                 ),
                 self.assertLogs(receiver_logger, level="WARNING") as captured,
             ):
@@ -124,6 +125,40 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["action"], "created")
+
+    async def test_servicenow_answers_without_json_are_bad_gateway(self) -> None:
+        # Etwa die HTML-Seite einer ruhenden Instanz: frueher HTTP 500
+        payload = load_fixture("case_created_vulnerability.json")
+
+        (lookup,) = await post_webhooks(
+            FakeBackends(html_for=frozenset({"lookup"})), [payload]
+        )
+        (token,) = await post_webhooks(
+            FakeBackends(html_for=frozenset({"token"})), [payload]
+        )
+
+        self.assertEqual(lookup.status_code, 502)
+        self.assertIn("Keine JSON-Antwort bei GET", lookup.json()["detail"])
+        self.assertEqual(token.status_code, 502)
+        self.assertIn("OAuth-Antwort ist kein JSON", token.json()["detail"])
+
+    async def test_mondoo_answer_without_json_leaves_ticket_without_scores(
+        self,
+    ) -> None:
+        receiver_logger = logging.getLogger("mondoo-receiver")
+        receiver_logger.disabled = False
+        try:
+            with self.assertLogs(receiver_logger, level="ERROR") as captured:
+                (response,) = await post_webhooks(
+                    FakeBackends(html_for=frozenset({"mondoo"})),
+                    [load_fixture("case_created_vulnerability.json")],
+                )
+        finally:
+            receiver_logger.disabled = True
+
+        self.assertEqual(response.json()["action"], "created")
+        (log,) = [m for m in captured.output if "abgebrochen" in m]
+        self.assertIn("Antwort ist kein JSON", log)
 
     async def test_risk_from_api_takes_precedence_over_summary_text(self) -> None:
         payload = load_fixture("case_created_vulnerability.json")

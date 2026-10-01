@@ -8,6 +8,8 @@ from app.models.mondoo import MondooEventType
 from app.services.servicenow import mapping
 
 ALEXANDER = "//captain.api.mondoo.app/users/2nZF38ZPg7vhizUrgIHqRF1aUwu"
+# Mondoo-Benutzer-MRN -> Name in ServiceNow, wie ihn der Startpunkt uebergibt
+USER_NAMES = {ALEXANDER: "Alexander Haller"}
 
 # Variablen des ServiceNow-Formulars "Mondoo Vulnerability" in Formularreihenfolge
 FORM_VARIABLES = [
@@ -84,7 +86,7 @@ class TitleTest(unittest.TestCase):
 
 class CatalogVariablesTest(unittest.TestCase):
     def test_variables_match_servicenow_form(self) -> None:
-        variables = mapping.build_catalog_variables(make_case())
+        variables = mapping.build_catalog_variables(make_case(), USER_NAMES)
         self.assertEqual(list(variables), FORM_VARIABLES)
         self.assertEqual(variables["number_of_affected_assets"], "4")
         self.assertEqual((variables["urgency"], variables["impact"]), ("1", "1"))
@@ -114,13 +116,18 @@ class TaskFieldsTest(unittest.TestCase):
         self.assertEqual(body["state"], "7")
 
     def test_watchers_add_mapped_human_creator(self) -> None:
-        watchers = mapping.watcher_identifiers(make_case())
+        watchers = mapping.watcher_identifiers(make_case(), USER_NAMES)
         self.assertEqual(watchers, ["lars.siefert@mosca.com", "Alexander Haller"])
         automated = make_case(is_automated=True)
         self.assertEqual(
-            mapping.watcher_identifiers(automated), ["lars.siefert@mosca.com"]
+            mapping.watcher_identifiers(automated, USER_NAMES),
+            ["lars.siefert@mosca.com"],
         )
-        self.assertEqual(mapping.creator_display_name(automated), "Mondoo-Drift")
+        self.assertEqual(
+            mapping.creator_display_name(automated, USER_NAMES), "Mondoo-Drift"
+        )
+        # Unbekannte Ersteller erscheinen mit ihrer MRN
+        self.assertEqual(mapping.creator_display_name(make_case(), {}), ALEXANDER)
 
 
 if __name__ == "__main__":

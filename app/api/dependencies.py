@@ -8,22 +8,24 @@ from fastapi import Depends, FastAPI, Request
 from app.api.telemetry import InboundHeaderSampler
 from app.core.config import settings
 from app.core.logging import logger
+from app.core.master_data import master_data
 from app.core.webhook_signature import HEADER_SIGNATURE, StandardWebhookVerifier
 from app.domain.ports import TicketSynchronizer
 from app.services.mondoo import MondooGraphQLClient
-from app.services.parsing import CaseParser
+from app.services.parsing import CaseParser, ParsingConfig
+from app.services.processing import WebhookProcessor
 from app.services.servicenow import (
     ReferenceCache,
     ServiceNowAPI,
     ServiceNowAuth,
     ServiceNowClient,
+    ServiceNowConfig,
 )
 
 __all__ = [
     "AppResources",
-    "get_case_parser",
     "get_resources",
-    "get_ticket_synchronizer",
+    "get_webhook_processor",
     "lifespan",
 ]
 
@@ -32,11 +34,14 @@ CONNECT_TIMEOUT_SECONDS = 5.0
 
 @dataclass(frozen=True)
 class AppResources:
-    """Ressourcen, die alle Requests eines Prozesses teilen."""
+    """Ressourcen, die alle Requests eines Prozesses teilen.
 
-    http_client: httpx.AsyncClient
-    servicenow_auth: ServiceNowAuth
-    reference_cache: ReferenceCache
+    Alle sind zustandslos oder task-sicher; so werden etwa das OAuth-Token und
+    der Referenz-Cache von ServiceNow von allen Requests wiederverwendet. Nur
+    dieses Modul reicht ``settings`` und ``master_data`` an die Teilsysteme.
+    """
+
+    webhook_processor: WebhookProcessor
     header_sampler: InboundHeaderSampler
     webhook_verifier: StandardWebhookVerifier
 
@@ -49,9 +54,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     async with httpx.AsyncClient(timeout=timeout) as http_client:
         app.state.resources = AppResources(
-            http_client=http_client,
-            servicenow_auth=ServiceNowAuth(http_client, settings.snow_base_url),
-            reference_cache=ReferenceCache(),
+            webhook_processor=WebhookProcessor(
+                _case_parser(http_client), _ticket_synchronizer(http_client)
+            ),
             header_sampler=InboundHeaderSampler(
                 extra_sensitive_headers=(
                     settings.MONDOO_WEBHOOK_AUTH_HEADER,
@@ -74,19 +79,50 @@ def get_resources(request: Request) -> AppResources:
     return resources
 
 
-def get_case_parser(resources: AppResources = Depends(get_resources)) -> CaseParser:
-    """Parser mit Mondoo als CVSS-Quelle."""
-    return CaseParser(MondooGraphQLClient(resources.http_client))
-
-
-def get_ticket_synchronizer(
+def get_webhook_processor(
     resources: AppResources = Depends(get_resources),
-) -> TicketSynchronizer:
-    """ServiceNow-Client mit geteiltem Token und Referenz-Cache."""
-    api = ServiceNowAPI(
-        resources.http_client, resources.servicenow_auth, resources.reference_cache
+) -> WebhookProcessor:
+    """Verarbeitung mit Mondoo als Bewertungsquelle und ServiceNow als Ziel."""
+    return resources.webhook_processor
+
+
+# ---------------------------------------------------------------------- #
+# Aufbau der Teilsysteme
+# ---------------------------------------------------------------------- #
+
+
+def _case_parser(http_client: httpx.AsyncClient) -> CaseParser:
+    scores_lookup = MondooGraphQLClient(
+        http_client, settings.MONDOO_API_KEY.get_secret_value()
     )
-    return ServiceNowClient(api)
+    config = ParsingConfig(
+        finding_type_patterns=dict(master_data.FINDING_TYPE_MAP),
+        space_names=dict(master_data.CATEGORY_MAP),
+        priority_map=dict(master_data.PRIORITY_MAP),
+        default_urgency_impact=master_data.DEFAULT_URGENCY_IMPACT,
+        default_cve=master_data.DEFAULT_CVE,
+        max_finding_lookups=settings.MONDOO_MAX_FINDING_LOOKUPS,
+    )
+    return CaseParser(scores_lookup, config)
+
+
+def _ticket_synchronizer(http_client: httpx.AsyncClient) -> TicketSynchronizer:
+    config = ServiceNowConfig(
+        base_url=settings.snow_base_url,
+        user=settings.SNOW_USER,
+        password=settings.SNOW_PASSWORD,
+        catalog_item_sys_id=settings.SNOW_CATALOG_ITEM_SYS_ID,
+        use_oauth=settings.uses_oauth,
+        client_id=settings.SNOW_CLIENT_ID,
+        client_secret=settings.SNOW_CLIENT_SECRET,
+        requested_for_sys_id=settings.SNOW_REQUESTED_FOR_SYS_ID,
+        user_lookup_fields=tuple(settings.SNOW_USER_LOOKUP_FIELDS),
+        user_names=dict(master_data.USER_MAP),
+    )
+    api = ServiceNowAPI.connect(
+        http_client, ServiceNowAuth(http_client, config), ReferenceCache(), config
+    )
+    return ServiceNowClient(api, config)
 
 
 def _log_effective_configuration() -> None:

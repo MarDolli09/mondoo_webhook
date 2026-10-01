@@ -63,12 +63,12 @@ class SecretMaskingFormatter(logging.Formatter):
         super().__init__(fmt, datefmt)
         # Laengste zuerst: verhindert, dass ein kurzer Wert Teile eines
         # laengeren zerschneidet und der Rest sichtbar bleibt.
-        self.secrets: list[str] = sorted(
-            {s for s in secrets if s}, key=len, reverse=True
+        self._secrets: tuple[str, ...] = tuple(
+            sorted({s for s in secrets if s}, key=len, reverse=True)
         )
 
     def format(self, record: logging.LogRecord) -> str:
-        return mask_secrets(super().format(record), self.secrets)
+        return mask_secrets(super().format(record), self._secrets)
 
 
 class CorrelationIdFilter(logging.Filter):

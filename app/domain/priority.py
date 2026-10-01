@@ -1,28 +1,35 @@
 """Priorisierung: Urgency und Impact aus Rating, Titel-Praefix oder Default."""
 
 from collections.abc import Mapping
-from typing import NamedTuple, Optional
+from enum import Enum
+from typing import Literal, NamedTuple, Optional
 
 __all__ = [
-    "PRIORITY_SOURCE_CVSS",
-    "PRIORITY_SOURCE_DEFAULT",
-    "PRIORITY_SOURCE_MONDOO_RISK",
-    "PRIORITY_SOURCE_TITLE",
+    "MatchKind",
     "Priority",
     "PriorityMatch",
+    "PrioritySource",
     "determine_priority",
 ]
 
-PRIORITY_SOURCE_CVSS = "cvss"
-PRIORITY_SOURCE_MONDOO_RISK = "mondoo_risk"
-PRIORITY_SOURCE_TITLE = "title"
-PRIORITY_SOURCE_DEFAULT = "default"
+
+class PrioritySource(str, Enum):
+    """Herkunft der Priorisierung; der Wert erscheint in Log und Telemetrie."""
+
+    MONDOO_RISK = "mondoo_risk"
+    CVSS = "cvss"
+    TITLE = "title"
+    DEFAULT = "default"
+
+
+# Womit die Zuordnung gelungen ist: Rating, Schweregrad-Tag im Titel oder nichts
+MatchKind = Literal["rating", "title", "none"]
 
 
 class PriorityMatch(NamedTuple):
-    """Womit die Zuordnung gelungen ist: ``rating``, ``title`` oder ``none``."""
+    """Gefundener Schluessel der Zuordnung, etwa ``HIGH`` oder ``[HIGH]``."""
 
-    kind: str
+    kind: MatchKind
     value: Optional[str]
 
 
@@ -31,7 +38,7 @@ class Priority(NamedTuple):
 
     urgency: str
     impact: str
-    source: str
+    source: PrioritySource
     match: PriorityMatch
 
 
@@ -51,8 +58,8 @@ def determine_priority(
     der Titel den Default-Wert, lautet die Herkunft ``default``.
     """
     ratings = (
-        (risk_rating, PRIORITY_SOURCE_MONDOO_RISK),
-        (cvss_rating, PRIORITY_SOURCE_CVSS),
+        (risk_rating, PrioritySource.MONDOO_RISK),
+        (cvss_rating, PrioritySource.CVSS),
     )
     for rating, source in ratings:
         key = (rating or "").upper()
@@ -62,7 +69,7 @@ def determine_priority(
 
     urgency, impact, match = _map_title(title, priority_map, default_urgency_impact)
     is_default = (urgency, impact) == tuple(default_urgency_impact)
-    source = PRIORITY_SOURCE_DEFAULT if is_default else PRIORITY_SOURCE_TITLE
+    source = PrioritySource.DEFAULT if is_default else PrioritySource.TITLE
     return Priority(urgency, impact, source, match)
 
 

@@ -1,25 +1,18 @@
-"""Webhook-Endpunkt: nimmt Mondoo-Ereignisse an und synchronisiert ServiceNow."""
+"""Webhook-Endpunkt: nimmt Mondoo-Ereignisse an und uebergibt sie der Verarbeitung."""
 
 import json
-import time
 from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request, status
 
 from app.api.authentication import AuthenticatedDelivery, authenticate_delivery
-from app.api.dependencies import (
-    AppResources,
-    get_case_parser,
-    get_resources,
-    get_ticket_synchronizer,
-)
-from app.api.telemetry import build_telemetry_record
+from app.api.dependencies import AppResources, get_resources, get_webhook_processor
+from app.api.telemetry import DeliveryContext, build_telemetry_record
 from app.core.exceptions import PayloadParsingError
 from app.core.logging import current_correlation_id, logger
-from app.domain.ports import TicketSynchronizer
 from app.models.mondoo import MondooWebhookEvent
-from app.services.parsing import CaseParser
+from app.services.processing import ProcessingResult, WebhookProcessor
 
 __all__ = ["router"]
 
@@ -31,52 +24,24 @@ async def receive_mondoo_webhook(
     request: Request,
     delivery: AuthenticatedDelivery = Depends(authenticate_delivery),
     resources: AppResources = Depends(get_resources),
-    case_parser: CaseParser = Depends(get_case_parser),
-    ticket_synchronizer: TicketSynchronizer = Depends(get_ticket_synchronizer),
+    processor: WebhookProcessor = Depends(get_webhook_processor),
 ) -> dict[str, Any]:
 
     received_at = datetime.now(timezone.utc)
-    started = time.perf_counter()
     logger.info(f"=== WEBHOOK EMPFANGEN (webhook-id {delivery.webhook_id}) ===")
     resources.header_sampler.log_once(request)
 
     event = MondooWebhookEvent.from_payload(_decode_json_object(delivery.body))
-    finding_type = case_parser.classify_finding_type(event)
-    logger.info(
-        f"Typ '{finding_type}' erkannt, Ereignis '{event.raw_type or '-'}', "
-        f"{event.case.assets_count} Assets. Starte Parsing..."
-    )
+    result = await processor.process(event)
 
-    # 1. Parsing, Bereinigung und optionale CVSS-Anreicherung
-    case = await case_parser.parse(event, finding_type)
-    parse_ms = _elapsed_ms(started)
-
-    # 2. Uebergabe an ServiceNow (Lookup via correlation_id -> order_now oder Update)
-    servicenow_started = time.perf_counter()
-    servicenow_record = await ticket_synchronizer.synchronize(case)
-    servicenow_ms = _elapsed_ms(servicenow_started)
-
-    # 3. Strukturierte Telemetrie
-    telemetry = build_telemetry_record(
-        finding_type=finding_type,
-        event=event,
-        case=case,
-        servicenow_record=servicenow_record,
-        parse_ms=parse_ms,
-        servicenow_ms=servicenow_ms,
-        received_at=received_at,
-        correlation_id=current_correlation_id(),
+    context = DeliveryContext(
         webhook_id=delivery.webhook_id,
+        correlation_id=current_correlation_id(),
+        received_at=received_at,
     )
+    telemetry = build_telemetry_record(result, event, context)
     logger.info(json.dumps(telemetry, ensure_ascii=False))
-
-    return {
-        "status": "success",
-        "action": servicenow_record.get("action"),
-        "ticket_type": finding_type,
-        "servicenow_number": servicenow_record.get("number"),
-        "servicenow_sys_id": servicenow_record.get("sys_id"),
-    }
+    return _response(result)
 
 
 def _decode_json_object(body: bytes) -> dict[str, Any]:
@@ -89,5 +54,12 @@ def _decode_json_object(body: bytes) -> dict[str, Any]:
     return payload
 
 
-def _elapsed_ms(started: float) -> float:
-    return round((time.perf_counter() - started) * 1000, 2)
+def _response(result: ProcessingResult) -> dict[str, Any]:
+    outcome = result.outcome
+    return {
+        "status": "success",
+        "action": outcome.action.value,
+        "ticket_type": result.finding_type,
+        "servicenow_number": outcome.ticket_number,
+        "servicenow_sys_id": outcome.ticket_id,
+    }

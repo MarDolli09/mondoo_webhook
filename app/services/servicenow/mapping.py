@@ -3,16 +3,18 @@
 Reine Funktionen ohne I/O; die aufgeloesten sys_ids liefert der Client.
 """
 
+from collections.abc import Mapping
 from typing import Any, Optional
 
 from app.core.logging import logger
-from app.core.master_data import AUTOMATED_CREATOR_LABEL, FIXED_WATCHERS, master_data
 from app.domain.case_text import strip_asset_suffix, strip_mitigate_phrase
-from app.domain.priority import PRIORITY_SOURCE_DEFAULT
+from app.domain.priority import PrioritySource
 from app.models.case import NormalizedCase
 from app.models.mondoo import MondooEventType
 from app.services.servicenow.constants import (
+    AUTOMATED_CREATOR_LABEL,
     CORRELATION_ID_MAX,
+    FIXED_WATCHERS,
     SHORT_DESCRIPTION_MAX,
     STATE_CLOSED_COMPLETE,
     STATE_CLOSED_SKIPPED,
@@ -49,12 +51,17 @@ def ticket_title(case: NormalizedCase) -> str:
     return _truncate(title, SHORT_DESCRIPTION_MAX)
 
 
-def watcher_identifiers(case: NormalizedCase) -> list[str]:
-    """Feste Beobachter und, bei menschlichem Ersteller, dessen Name."""
+def watcher_identifiers(
+    case: NormalizedCase, user_names: Mapping[str, str]
+) -> list[str]:
+    """Feste Beobachter und, bei menschlichem Ersteller, dessen Name.
+
+    ``user_names`` ordnet Mondoo-Benutzer-MRNs den Namen in ServiceNow zu.
+    """
     watchers = list(FIXED_WATCHERS)
 
     if not case.is_automated and case.created_by:
-        creator_name = master_data.USER_MAP.get(case.created_by.strip())
+        creator_name = user_names.get(case.created_by.strip())
         if creator_name:
             known = {watcher.strip().lower() for watcher in watchers}
             if creator_name.strip().lower() not in known:
@@ -63,16 +70,18 @@ def watcher_identifiers(case: NormalizedCase) -> list[str]:
     return watchers
 
 
-def creator_display_name(case: NormalizedCase) -> str:
-    """Name des Erstellers laut USER_MAP, sonst dessen MRN."""
+def creator_display_name(case: NormalizedCase, user_names: Mapping[str, str]) -> str:
+    """Name des Erstellers laut ``user_names``, sonst dessen MRN."""
     if case.is_automated or not case.created_by:
         return AUTOMATED_CREATOR_LABEL
 
     creator_mrn = case.created_by.strip()
-    return master_data.USER_MAP.get(creator_mrn, creator_mrn)
+    return user_names.get(creator_mrn, creator_mrn)
 
 
-def build_catalog_variables(case: NormalizedCase) -> dict[str, str]:
+def build_catalog_variables(
+    case: NormalizedCase, user_names: Mapping[str, str]
+) -> dict[str, str]:
     """Variablen des Katalogformulars "Mondoo Vulnerability" fuer ``order_now``.
 
     Reihenfolge wie im Formular. ``mondoo_mrn`` wird in ServiceNow per
@@ -88,7 +97,7 @@ def build_catalog_variables(case: NormalizedCase) -> dict[str, str]:
         "finding_type": case.finding_type,
         "mondoo_ticket_url": case.ticket_url,
         "number_of_affected_assets": str(case.assets_count),
-        "created_by": creator_display_name(case),
+        "created_by": creator_display_name(case, user_names),
         "urgency": case.urgency,
         "impact": case.impact,
         "mondoo_mrn": correlation_id(case),
@@ -136,7 +145,7 @@ def build_update_fields(case: NormalizedCase) -> dict[str, Any]:
         ),
     }
 
-    if case.priority_source != PRIORITY_SOURCE_DEFAULT:
+    if case.priority_source is not PrioritySource.DEFAULT:
         body["urgency"] = case.urgency
         body["impact"] = case.impact
     else:

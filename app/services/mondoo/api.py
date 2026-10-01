@@ -29,11 +29,6 @@ class MondooGraphQLAPI:
         self._http_client = http_client
         self._api_key = api_key
 
-    @property
-    def is_configured(self) -> bool:
-        """True, wenn ein API-Key vorliegt."""
-        return bool(self._api_key)
-
     def _headers(self) -> dict[str, str]:
         return {
             "Content-Type": "application/json",
@@ -45,7 +40,8 @@ class MondooGraphQLAPI:
         """Fuehrt eine Abfrage aus und gibt den ``data``-Block zurueck.
 
         Raises:
-            MondooAPIError: Netzwerkfehler oder HTTP-Status ungleich 200.
+            MondooAPIError: Netzwerkfehler, HTTP-Status ungleich 200 oder ein
+                Rumpf, der kein JSON-Objekt ist.
             MondooGraphQLError: Die Antwort enthaelt ``errors``.
         """
         try:
@@ -63,7 +59,14 @@ class MondooGraphQLAPI:
                 f"HTTP {response.status_code}: {_describe_errors(response)}"
             )
 
-        body = response.json()
+        try:
+            body = response.json()
+        except ValueError as exc:
+            raise MondooAPIError(
+                f"Antwort ist kein JSON: {response.text[:ERROR_TEXT_LIMIT]}"
+            ) from exc
+        if not isinstance(body, dict):
+            raise MondooAPIError("Antwort ist kein JSON-Objekt.")
         if body.get("errors"):
             raise MondooGraphQLError(_error_messages(body["errors"]))
 

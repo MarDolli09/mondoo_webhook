@@ -1,12 +1,12 @@
 # Project Context Handover
 
-Stand: 01.10.2026, Commit `d936cef`. Laut Test vom 01.10. funktionieren
-Anlegen und Schließen von Tickets (auch automatisch) wie erwartet; ob der
-SCTASK den Tickettitel samt richtiger Assignment Group trägt, steht in der
-Checkliste noch offen. **E-Mail-Alarmierung
-bei Fehlern ist eingerichtet** (Abschnitt 5, „Alarmierung"). Vor dem Aufräumen
-von Repo und Code gesichert im Branch `backup/pre-cleanup-2026-10-01`
-(`d936cef`).
+Stand: 01.10.2026, Commit `23e5d48` plus **Architektur-Refactoring (uncommittet,
+nicht deployt)**, siehe Abschnitt 3 „Refactoring 01.10.“. Laut Test vom 01.10.
+funktionieren Anlegen und Schließen von Tickets (auch automatisch) wie
+erwartet; ob der SCTASK den Tickettitel samt richtiger Assignment Group trägt,
+steht in der Checkliste noch offen. **E-Mail-Alarmierung bei Fehlern ist
+eingerichtet** (Abschnitt 5, „Alarmierung"). Stand vor dem Refactoring
+gesichert im Branch `backup/pre-cleanup-2026-10-01` (`d936cef`).
 
 ## 1. Executive Summary & Project Goal
 
@@ -40,8 +40,9 @@ pydantic-settings 2.11.0. Werkzeuge: ruff und mypy (Konfiguration in
 **Schichten**, Abhängigkeiten zeigen nur nach unten:
 
 ```
-app/api        HTTP-Endpunkt, Authentifizierung, Lifespan, Telemetrie
-app/services   mondoo (Bewertungen) · parsing (CaseParser) · servicenow (RITM)
+app/api        HTTP-Endpunkt, Authentifizierung, Lifespan/Startpunkt, Telemetrie
+app/services   processing (Anwendungsablauf) · parsing (CaseParser)
+               mondoo (Bewertungen) · servicenow (RITM, SCTASK)
 app/domain     Fachregeln ohne I/O, Ports (abstrakte Schnittstellen)
 app/models     Eingangsmodell (Mondoo) und NormalizedCase
 app/core       Konfiguration, Stammdaten, Logging, Ausnahmen, Signaturprüfung
@@ -55,22 +56,55 @@ app/core       Konfiguration, Stammdaten, Logging, Ausnahmen, Signaturprüfung
   Basispakete; jedes Modul legt seine Schnittstelle über `__all__` fest.
 - `app.domain` und `app.models` sind ohne Umgebungsvariablen importierbar.
 - Abhängigkeitsumkehr über zwei Ports in `app/domain/ports.py`:
-  `FindingScoresLookup` (Mondoo) und `TicketSynchronizer` (ServiceNow).
+  `FindingScoresLookup` (Mondoo) und `TicketSynchronizer` (ServiceNow, liefert
+  ein typisiertes `SyncOutcome` mit `SyncAction`).
 
 **Muster:**
 
 - Konfiguration über pydantic-settings, Validierung beim Start (fail fast).
-  Technisches in `core/config.py`, Fachdaten in `core/master_data.py`.
-- Geteilte Ressourcen (HTTP-Client, ServiceNow-Auth, Referenz-Cache,
-  Signaturprüfer) entstehen im Lifespan und kommen per FastAPI-Dependency.
+  Technisches in `core/config.py`, Fachdaten in `core/master_data.py`. **Die
+  Teilsysteme unter `app/services` lesen weder `settings` noch
+  `master_data`**; `app/api/dependencies.py` übergibt ihnen `ServiceNowConfig`
+  bzw. `ParsingConfig` und den API-Key (geprüft in `tests/test_architecture.py`).
+  `settings` lesen sonst nur `app/main.py`, `app/api/authentication.py` und
+  `app/core/logging.py`.
+- Geteilte Ressourcen (`WebhookProcessor` mit Parser und ServiceNow-Client,
+  Header-Stichprobe, Signaturprüfer) entstehen im Lifespan und kommen per
+  FastAPI-Dependency; Token und Referenz-Cache stecken im ServiceNow-Client.
+- ServiceNow: `transport.py` (Anmeldung, Retry, Fehlerabbildung, `poll`) ist
+  von den Ressourcen getrennt (`request_items`, `catalog_tasks`, `catalog`,
+  `users`), gebündelt in `ServiceNowAPI`.
 - Fehler nachgelagerter Systeme ergeben immer **502**, nie deren Statuscode.
 - Logs enthalten nie Geheimwerte; die Correlation-ID steht in jeder Zeile.
 
 ## 3. Active Task & Current State
 
 **Funktionsfähig:** Ende-zu-Ende gegen `bmsptest` mit `SNOW_AUTH_MODE=basic`.
-Tickets werden angelegt, aktualisiert und geschlossen. 53 Tests, ruff und mypy
-sind grün (zu den 9 Windows-Ausfällen in `test_config` siehe Abschnitt 5).
+Tickets werden angelegt, aktualisiert und geschlossen. 61 Tests, ruff und mypy
+sind grün, auch unter Windows.
+
+**Refactoring 01.10.** (nach dem Architektur-Review, uncommittet, nicht
+deployt). Umgesetzt: typisiertes Port-Ergebnis `SyncOutcome` (W1),
+Konfiguration nur noch über den Startpunkt injiziert (W2), `ServiceNowAPI` in
+Transport und Ressourcen zerlegt (W3), Antworten ohne JSON ergeben 502 statt
+500 (W4), lange Funktionen zerlegt (W5), Anwendungsablauf `WebhookProcessor` in
+`app/services/processing` (W6), `PrioritySource`-Enum und unveränderliches
+`NormalizedCase` (W7), plattformunabhängige Tests (W8), `FindingTypeProfile`
+entfernt (I1), Logtext „Priority Mapping via Rating“ (I2), Begründung für den
+breiten Fang im Mondoo-Client und toter Zweig entfernt (I3), Kapselung (I4),
+ServiceNow-Organisationsdaten nach `servicenow/constants.py` (I5), gemeinsames
+`poll` (I6), `DeliveryContext` für die Telemetrie (I7). Offen: I8
+(Python-Zielversion, CI).
+
+Abgesichert mit einem Golden-Master-Vergleich: 26 Szenarien (Anlegen, Update,
+Close, Delete, Fehlerpfade, SCTASK, Abweisungen), 191 ausgehende Requests,
+alle Antworten, Logzeilen und Wartezeiten vor und nach dem Umbau verglichen.
+Requests sind identisch; bewusst geändert sind nur die 502 bei Antworten ohne
+JSON (samt Fehlerlog mit Ursache) und der Logtext „Priority Mapping via
+Rating“. Bei unveränderter Alarmierung: Jeder dieser Fehler schreibt weiterhin
+eine `[ERROR]`-Zeile. `parse_duration_ms` in der Telemetrie misst jetzt ab dem
+Start der Verarbeitung, also ohne Dekodieren und Validieren des Payloads
+(Unterschied: wenige Millisekunden).
 
 **Vorfall 29.09.: Mondoo lehnt die Abfrage ab.** Nach dem Deployment von
 `cf166b1` blieben `cvss_*` und `mondoo_risk_*` in allen Tickets leer (z. B.
@@ -162,30 +196,37 @@ nicht „Mission-Critical".
 
 | Pfad | Aufgabe |
 |---|---|
-| `app/api/webhook.py` | Endpunkt `POST /webhook/mondoo`, Ablaufsteuerung, Telemetrie |
+| `app/api/webhook.py` | Endpunkt `POST /webhook/mondoo`: dekodieren, `WebhookProcessor` aufrufen, Telemetrie, Antwort |
 | `app/api/authentication.py` | Auth-Header und Signaturprüfung, 401 mit Diagnose im Log |
-| `app/api/dependencies.py` | Lifespan, geteilte Ressourcen, Startprotokoll der Einstellungen |
-| `app/api/telemetry.py` | Telemetriedatensatz, Header-Stichprobe |
+| `app/api/dependencies.py` | Startpunkt: Lifespan, Aufbau der Teilsysteme aus `settings`/`master_data`, Startprotokoll |
+| `app/api/telemetry.py` | Telemetriedatensatz (`DeliveryContext`), Header-Stichprobe |
 | `app/core/config.py` | Technische Einstellungen samt Startvalidierung |
-| `app/core/master_data.py` | Spaces, Benutzer, Prioritäten, Finding-Typen, feste Beobachter |
+| `app/core/master_data.py` | Spaces, Benutzer, Prioritäten, Finding-Typen (per Umgebungsvariable überschreibbar) |
 | `app/core/webhook_signature.py` | Standard-Webhooks-Signatur (HMAC-SHA256) |
 | `app/core/logging.py` | Secret-Maskierung, Correlation-ID |
 | `app/domain/scores.py` | CVSS- und Risk-Skalen, Ergebnistyp `FindingScores` |
-| `app/domain/priority.py` | Urgency/Impact samt Herkunft |
-| `app/domain/finding_types.py` | Klassifikation und Verarbeitungsprofile je Typ |
+| `app/domain/ports.py` | Ports `FindingScoresLookup`, `TicketSynchronizer`; Ergebnis `SyncOutcome`/`SyncAction` |
+| `app/domain/priority.py` | Urgency/Impact samt Herkunft (`PrioritySource`) |
+| `app/domain/finding_types.py` | Klassifikation, Typ im Ticket (`reported_finding_type`) |
 | `app/domain/case_text.py` | Auswertung der AI-Summary, Tickettitel ohne „Mitigate …“ und ohne Asset |
 | `app/domain/identifiers.py` | MRNs, Space-IDs, Identitäten, Mondoo-Links |
 | `app/models/mondoo.py` | Eingangsmodell des Webhooks |
 | `app/models/case.py` | `NormalizedCase` als interne Zwischenform |
+| `app/services/processing/processor.py` | `WebhookProcessor`: klassifizieren, normalisieren, synchronisieren, Laufzeiten |
 | `app/services/parsing/case_parser.py` | Klassifikation, Anreicherung, Normalisierung |
+| `app/services/parsing/config.py` | `ParsingConfig` (Zuordnungstabellen, Grenzen) |
 | `app/services/mondoo/queries.py` | GraphQL-Abfrage `findings(filter: {mrn})`, `cvss` je Typ mit Alias (`CVSS_FIELDS`) |
 | `app/services/mondoo/api.py` | GraphQL-Transport, Union-Fehler, GraphQL-Meldungen fürs Log |
 | `app/services/mondoo/client.py` | Abfrage je Finding, höchstes Risiko über alle Assets |
 | `app/services/mondoo/findings.py` | Auswertung einzelner Finding-Knoten |
-| `app/services/servicenow/mapping.py` | Katalogvariablen und RITM-Felder |
-| `app/services/servicenow/client.py` | Anlegen, Aktualisieren, Schließen |
-| `app/services/servicenow/api.py` | REST-Aufrufe mit Retry und Fehlerdiagnose |
-| `tests/fakes.py` | Attrappen für Mondoo und ServiceNow, Ende-zu-Ende-Aufrufe |
+| `app/services/servicenow/mapping.py` | Tickettitel, Katalogvariablen und RITM-Felder |
+| `app/services/servicenow/client.py` | Anlegen, Aktualisieren, Schließen, SCTASK-Titel |
+| `app/services/servicenow/config.py` | `ServiceNowConfig` (Zugang, Katalog-Item, Benutzerzuordnung) |
+| `app/services/servicenow/constants.py` | Organisationsdaten (technischer Benutzer, Beobachter), Zustände, Pfade, Wartezeiten |
+| `app/services/servicenow/api.py` | `ServiceNowAPI`: bündelt die Ressourcen auf einem Transport |
+| `app/services/servicenow/transport.py` | REST-Aufrufe mit Retry, Fehlerabbildung (502), `poll` |
+| `app/services/servicenow/request_items.py` · `catalog_tasks.py` · `catalog.py` · `users.py` | Ressourcen `sc_req_item`, `sc_task`, `order_now`, `sys_user` |
+| `tests/fakes.py` | Attrappen für Mondoo und ServiceNow (auch HTML statt JSON), Ende-zu-Ende-Aufrufe |
 | `tests/test_architecture.py` | Architekturregeln als Test |
 | `tests/.env.test` | Dummy-Umgebung für Tests und Audits |
 | `scripts/verify_scores.py` | Führt die Produktionsabfrage gegen die echte API aus; optional `<findingMrn> [scope …]`, misst die Dauer |
@@ -512,11 +553,13 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
   Texte zerstückelt, der Inhalt kann dabei beschädigt werden. Immer die ganze
   Datei kopieren (Strg+A) und mit `md5sum` gegen den lokalen Stand prüfen
   (`tr -d '\r' < scripts/verify_scores.py | md5sum`).
-- **Lokale Entwicklung unter Windows** (venv mit Python 3.11): Im venv fehlt
-  `tzdata`, ohne das `ZoneInfo("Europe/Berlin")` scheitert. Die 9
-  Unterprozess-Tests in `tests/test_config.py` scheitern dort mit `WinError
-  10106`, auch ohne Codeänderung. ruff und mypy sind nicht im venv installiert.
-  Die Arbeitskopie nutzt CRLF (`core.autocrlf=true`).
+- **Lokale Entwicklung unter Windows** (venv mit Python 3.11): `requirements.txt`
+  installiert unter Windows `tzdata` mit (für `ZoneInfo("Europe/Berlin")`); ein
+  bestehendes venv braucht einmal `pip install -r requirements.txt`. Die
+  Unterprozess-Tests geben über `tests.isolated_env` die Windows-Basisvariablen
+  (`SYSTEMROOT`, `SYSTEMDRIVE`, …) weiter; seit 01.10. ist die Suite auch unter
+  Windows grün. ruff und mypy sind nicht im venv installiert. Die Arbeitskopie
+  nutzt CRLF (`core.autocrlf=true`).
 
 ## 6. Next Immediate Steps (Checkliste)
 
@@ -593,5 +636,14 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
       `SCTASK …: '…' durch Tickettitel ersetzt.`
 - [ ] In ServiceNow „Map to field" für die Variablen `urgency` → Urgency und
       `impact` → Impact aktivieren (`bmsptest` und vor dem Livegang `bmsp`).
+- [x] Architektur-Review und Refactoring W1–W8, I1–I7 (01.10., Abschnitt 3
+      „Refactoring 01.10.“).
+- [ ] Refactoring committen, deployen und Ende-zu-Ende auf `bmsptest` prüfen:
+      Anlegen, Update, Schließen, Ausnahme, SCTASK-Titel. Im Log müssen die
+      gewohnten Zeilen stehen, neu nur „Priority Mapping via Rating“.
+- [ ] I8: Python-Zielversion festlegen (läuft lokal auf dem Mac noch 3.9?)
+      und eine CI-Pipeline mit ruff, mypy, Tests und Abdeckung einrichten.
+- [ ] Optional: Backup-Branch pushen
+      (`git push origin backup/pre-cleanup-2026-10-01`), bisher nur lokal.
 - [ ] Optional: Getrennte Ressourcengruppen oder ein Deployment-Slot für Test
       und Prod, damit Einstellungen nicht gegeneinander getauscht werden müssen.

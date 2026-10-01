@@ -2,15 +2,20 @@
 
 from pydantic import BaseModel, ConfigDict
 
+from app.domain.priority import PrioritySource
 from app.models.mondoo import MondooEventType
 
 __all__ = ["NormalizedCase"]
 
 
 class NormalizedCase(BaseModel):
-    """Bereinigter und angereicherter Mondoo-Case."""
+    """Bereinigter und angereicherter Mondoo-Case; nach dem Parsing unveraenderlich.
 
-    model_config = ConfigDict(extra="ignore")
+    Leere Texte stehen fuer "kein Wert": ServiceNow erwartet in den
+    Katalogvariablen leere Zeichenketten, nicht ``null``.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     # Rohwert aus dem Payload (z. B. "TYPE_CREATED"), bleibt fuer das Logging erhalten
     raw_event_type: str
@@ -36,7 +41,7 @@ class NormalizedCase(BaseModel):
     risk_rating: str = ""
     risk_score: str = ""
     # Herkunft der Priorisierung fuer Auswertung und Nachvollziehbarkeit
-    priority_source: str = "default"
+    priority_source: PrioritySource = PrioritySource.DEFAULT
     urgency: str
     impact: str
 

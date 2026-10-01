@@ -10,7 +10,7 @@ from app.domain.case_text import (
     strip_asset_suffix,
     strip_mitigate_phrase,
 )
-from app.domain.finding_types import classify_finding_type, profile_for
+from app.domain.finding_types import classify_finding_type, reported_finding_type
 from app.domain.identifiers import (
     count_referenced_assets,
     extract_space_id,
@@ -229,8 +229,9 @@ class FindingTypeTest(unittest.TestCase):
         eol = "//vadvisor.api.mondoo.app/advisories/MONDOO-EOL-WIN-2012"
         self.assertEqual(classify_finding_type([eol], patterns), "end-of-life")
         self.assertEqual(classify_finding_type(["//x/checks/1"], patterns), "other")
-        self.assertEqual(profile_for("end-of-life").servicenow_type, "end-of-life")
-        self.assertEqual(profile_for("unbekannt").servicenow_type, "other")
+        self.assertEqual(reported_finding_type("end-of-life"), "end-of-life")
+        # Ein per FINDING_TYPE_MAP ergaenzter Typ erscheint im Ticket als "other"
+        self.assertEqual(reported_finding_type("unbekannt"), "other")
 
 
 class WebhookEventTest(unittest.TestCase):

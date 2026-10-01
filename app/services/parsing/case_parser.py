@@ -3,20 +3,14 @@
 from collections.abc import Sequence
 from typing import Optional
 
-from app.core.config import settings
 from app.core.logging import logger
-from app.core.master_data import master_data
 from app.domain.case_text import (
     extract_cve,
     extract_risk_from_summary,
     extract_ticket_url,
     sanitize_url,
 )
-from app.domain.finding_types import (
-    FindingTypeProfile,
-    classify_finding_type,
-    profile_for,
-)
+from app.domain.finding_types import classify_finding_type, reported_finding_type
 from app.domain.identifiers import (
     case_app_url,
     count_referenced_assets,
@@ -35,6 +29,7 @@ from app.models.mondoo import (
     MondooWebhookEvent,
     map_event_type,
 )
+from app.services.parsing.config import ParsingConfig
 
 __all__ = ["CaseParser"]
 
@@ -44,26 +39,27 @@ LOG_BANNER_WIDTH = 16
 class CaseParser:
     """Klassifiziert, reichert an und normalisiert Mondoo-Cases.
 
-    Einziger Zustand ist die Bewertungsquelle; alle uebrigen Schritte sind reine
-    Funktionen dieses Moduls bzw. von ``app.domain``.
+    Zustand sind nur die Bewertungsquelle und die Zuordnungstabellen; alle
+    uebrigen Schritte sind reine Funktionen dieses Moduls bzw. von ``app.domain``.
     """
 
-    def __init__(self, scores_lookup: FindingScoresLookup) -> None:
+    def __init__(
+        self, scores_lookup: FindingScoresLookup, config: ParsingConfig
+    ) -> None:
         self._scores_lookup = scores_lookup
+        self._config = config
 
-    @staticmethod
-    def classify_finding_type(event: MondooWebhookEvent) -> str:
+    def classify_finding_type(self, event: MondooWebhookEvent) -> str:
         """Finding-Typ anhand der Finding-MRNs, z. B. ``vulnerability``."""
         return classify_finding_type(
             (ref.finding_mrn for ref in event.case.finding_refs),
-            master_data.FINDING_TYPE_MAP,
+            self._config.finding_type_patterns,
         )
 
     async def parse(
         self, event: MondooWebhookEvent, finding_type: str
     ) -> NormalizedCase:
         """Erzeugt den normalisierten Case fuer den erkannten Finding-Typ."""
-        profile = profile_for(finding_type)
         case = event.case
         description = event.description
         space_id = extract_space_id(case.owner_mrn)
@@ -71,18 +67,8 @@ class CaseParser:
         event_type = _determine_event_type(event.raw_type, case.status)
         scores = await self._resolve_scores(case, space_id)
         risk_rating, risk_score = _resolve_mondoo_risk(description, scores)
-        priority = _determine_priority(case.title, scores.cvss_rating, risk_rating)
-
-        assets_count = case.assets_count or count_referenced_assets(
-            ref.scope_mrn for ref in case.finding_refs
-        )
-        created_by = case.created_by.strip()
-        is_automated = is_automated_identity(created_by)
-        if is_automated:
-            logger.warning(
-                f"Ticket ohne Benutzer-MRN in createdBy ('{created_by}'). "
-                f"Moeglicherweise automatisch erzeugtes Regressions-Ticket."
-            )
+        priority = self._determine_priority(case.title, scores.cvss_rating, risk_rating)
+        created_by, is_automated = _creator(case.created_by)
 
         normalized = NormalizedCase(
             raw_event_type=event.raw_type,
@@ -90,14 +76,10 @@ class CaseParser:
             event_type=event_type,
             mrn=case.mrn,
             owner_mrn=case.owner_mrn,
-            mondoo_space=master_data.CATEGORY_MAP.get(space_id or "", space_id or ""),
-            finding_type=(
-                event.ticket_type
-                if event.ticket_type is not None
-                else profile.servicenow_type
-            ),
-            finding_cve=extract_cve(case.title, master_data.DEFAULT_CVE),
-            assets_count=assets_count,
+            mondoo_space=self._space_name(space_id),
+            finding_type=_ticket_finding_type(event, finding_type),
+            finding_cve=extract_cve(case.title, self._config.default_cve),
+            assets_count=_assets_count(case),
             cvss_score=scores.cvss_score or "",
             cvss_rating=scores.cvss_rating or "",
             risk_rating=risk_rating or "",
@@ -114,7 +96,9 @@ class CaseParser:
             policies=case.tags.policies,
         )
 
-        _log_normalized_case(normalized, profile, description)
+        _log_normalized_case(
+            normalized, reported_finding_type(finding_type), description
+        )
         return normalized
 
     async def _resolve_scores(
@@ -125,7 +109,8 @@ class CaseParser:
         Gefragt wird im Scope des Space, nicht je Asset: Die Abfrage liefert
         dann alle betroffenen Assets des Findings auf einmal.
         """
-        for ref in _unique_finding_refs(case.finding_refs):
+        refs = _unique_finding_refs(case.finding_refs, self._config.max_finding_lookups)
+        for ref in refs:
             scores = await self._scores_lookup.fetch_finding_scores(
                 finding_mrn=ref.finding_mrn,
                 scope_mrn=case.owner_mrn,
@@ -142,9 +127,27 @@ class CaseParser:
                 return scores
         return NO_FINDING_SCORES
 
+    def _space_name(self, space_id: Optional[str]) -> str:
+        """Anzeigename des Space; unbekannte Spaces erscheinen mit ihrer ID."""
+        key = space_id or ""
+        return self._config.space_names.get(key, key)
+
+    def _determine_priority(
+        self, title: str, cvss_rating: Optional[str], risk_rating: Optional[str]
+    ) -> Priority:
+        priority = determine_priority(
+            title,
+            cvss_rating,
+            risk_rating,
+            self._config.priority_map,
+            self._config.default_urgency_impact,
+        )
+        _log_priority(priority)
+        return priority
+
 
 # ---------------------------------------------------------------------- #
-# Ereignis
+# Ereignis und Ersteller
 # ---------------------------------------------------------------------- #
 
 
@@ -159,12 +162,40 @@ def _determine_event_type(raw_type: str, case_status: str) -> MondooEventType:
     return event_type
 
 
+def _creator(raw_created_by: str) -> tuple[str, bool]:
+    """Ersteller-MRN ohne Rand und ob das Ticket automatisch entstanden ist."""
+    created_by = raw_created_by.strip()
+    is_automated = is_automated_identity(created_by)
+    if is_automated:
+        logger.warning(
+            f"Ticket ohne Benutzer-MRN in createdBy ('{created_by}'). "
+            f"Moeglicherweise automatisch erzeugtes Regressions-Ticket."
+        )
+    return created_by, is_automated
+
+
 # ---------------------------------------------------------------------- #
 # Findings
 # ---------------------------------------------------------------------- #
 
 
-def _unique_finding_refs(refs: Sequence[FindingRef]) -> list[FindingRef]:
+def _ticket_finding_type(event: MondooWebhookEvent, finding_type: str) -> str:
+    """Typ im Ticket: ``ticketType`` aus dem Payload, sonst der erkannte Typ."""
+    if event.ticket_type is not None:
+        return event.ticket_type
+    return reported_finding_type(finding_type)
+
+
+def _assets_count(case: MondooCase) -> int:
+    """Anzahl laut Mondoo, sonst die Assets aus den Finding-Refs."""
+    return case.assets_count or count_referenced_assets(
+        ref.scope_mrn for ref in case.finding_refs
+    )
+
+
+def _unique_finding_refs(
+    refs: Sequence[FindingRef], max_lookups: int
+) -> list[FindingRef]:
     unique: list[FindingRef] = []
     seen: set[str] = set()
 
@@ -173,7 +204,7 @@ def _unique_finding_refs(refs: Sequence[FindingRef]) -> list[FindingRef]:
             continue
         seen.add(ref.finding_mrn)
         unique.append(ref)
-        if len(unique) >= settings.MONDOO_MAX_FINDING_LOOKUPS:
+        if len(unique) >= max_lookups:
             break
 
     if len(refs) > len(unique):
@@ -220,21 +251,10 @@ def _resolve_mondoo_risk(
     return None, None
 
 
-def _determine_priority(
-    title: str, cvss_rating: Optional[str], risk_rating: Optional[str]
-) -> Priority:
-    priority = determine_priority(
-        title,
-        cvss_rating,
-        risk_rating,
-        master_data.PRIORITY_MAP,
-        master_data.DEFAULT_URGENCY_IMPACT,
-    )
-
+def _log_priority(priority: Priority) -> None:
     if priority.match.kind == "rating":
         logger.info(
-            f"Priority Mapping via GraphQL Rating ('{priority.match.value}') "
-            f"erfolgreich."
+            f"Priority Mapping via Rating ('{priority.match.value}') erfolgreich."
         )
     elif priority.match.kind == "title":
         logger.info(
@@ -247,10 +267,9 @@ def _determine_priority(
         )
 
     logger.info(
-        f"Priorisierung ueber '{priority.source}' -> "
+        f"Priorisierung ueber '{priority.source.value}' -> "
         f"urgency={priority.urgency}, impact={priority.impact}"
     )
-    return priority
 
 
 # ---------------------------------------------------------------------- #
@@ -266,10 +285,10 @@ def _ticket_url(description: str, space_id: Optional[str], case_mrn: str) -> str
 
 
 def _log_normalized_case(
-    normalized: NormalizedCase, profile: FindingTypeProfile, description: str
+    normalized: NormalizedCase, reported_type: str, description: str
 ) -> None:
     rule = "=" * LOG_BANNER_WIDTH
-    label = profile.servicenow_type.upper()
+    label = reported_type.upper()
     logger.info(f"{rule} [{label}] BEREINIGTER PAYLOAD {rule}")
     logger.info(normalized.model_dump_json(indent=2))
     logger.info(f"description: {len(description)} Zeichen (im Log ausgelassen)")

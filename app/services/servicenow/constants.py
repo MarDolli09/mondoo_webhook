@@ -1,10 +1,14 @@
-"""Feste Werte der ServiceNow-Instanz: Zustaende, Feldgrenzen, Tabellen, Pfade."""
+"""Feste Werte der ServiceNow-Anbindung: Organisationsdaten, Zustaende, Feldgrenzen,
+Tabellen und Pfade.
+"""
 
 __all__ = [
+    "AUTOMATED_CREATOR_LABEL",
     "CATALOG_TASK_LOOKUP_DELAYS",
     "CATALOG_TASK_WORKFLOW_TITLE_PREFIX",
     "CORRELATION_ID_MAX",
     "DEFAULT_MAX_RETRIES",
+    "FIXED_WATCHERS",
     "PATH_OAUTH_TOKEN",
     "PATH_ORDER_NOW",
     "PATH_SUBMIT_ORDER",
@@ -13,6 +17,7 @@ __all__ = [
     "RETRYABLE_STATUS",
     "RITM_RESOLVE_DELAYS",
     "SHORT_DESCRIPTION_MAX",
+    "SNOW_INTEGRATION_USER",
     "STATE_CLOSED_COMPLETE",
     "STATE_CLOSED_INCOMPLETE",
     "STATE_CLOSED_SKIPPED",
@@ -23,6 +28,18 @@ __all__ = [
     "TERMINAL_STATES",
     "TOKEN_EXPIRY_MARGIN_SECONDS",
 ]
+
+# ---------------------------------------------------------------------- #
+# Organisationsdaten
+# ---------------------------------------------------------------------- #
+# Technischer ServiceNow-Benutzer: "Geoeffnet von" jedes neuen RITM.
+SNOW_INTEGRATION_USER = "mosca.rest"
+
+# Beobachter jedes neuen RITM; aufgeloest ueber die konfigurierten Suchfelder.
+FIXED_WATCHERS: tuple[str, ...] = ("lars.siefert@mosca.com",)
+
+# Anzeigename des Erstellers bei automatisch erzeugten Mondoo-Tickets.
+AUTOMATED_CREATOR_LABEL = "Mondoo-Drift"
 
 # ---------------------------------------------------------------------- #
 # RITM-Zustaende

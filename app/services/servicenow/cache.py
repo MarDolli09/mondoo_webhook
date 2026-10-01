@@ -42,7 +42,3 @@ class ReferenceCache:
             if value:
                 self._entries[key] = value
             return value
-
-    def clear(self) -> None:
-        """Verwirft alle gemerkten Referenzen."""
-        self._entries.clear()

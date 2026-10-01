@@ -6,3 +6,5 @@ gunicorn==23.0.0
 httpx==0.28.1
 pydantic==2.13.5
 pydantic-settings==2.11.0
+# Zeitzonendaten fuer zoneinfo; Linux (Azure) bringt sie mit, Windows nicht.
+tzdata==2026.4; sys_platform == "win32"

@@ -1,21 +1,25 @@
-"""Architekturregeln: azyklische Importe, Teilsystem-Fassaden, reine Basispakete."""
+"""Architekturregeln: azyklische Importe, Teilsystem-Fassaden, reine Basispakete,
+Konfiguration nur ueber den Startpunkt."""
 
 import ast
-import os
 import subprocess
 import sys
 import unittest
 from pathlib import Path
 
 import tests  # noqa: F401  (Dummy-Umgebung)
+from tests import isolated_env
 
 ROOT = Path(__file__).resolve().parent.parent
 SUBSYSTEMS = (
     "app.api",
     "app.services.mondoo",
     "app.services.parsing",
+    "app.services.processing",
     "app.services.servicenow",
 )
+SERVICES = "app.services"
+CONFIGURATION_MODULES = {"app.core.config", "app.core.master_data"}
 
 
 def module_name(path: Path) -> str:
@@ -76,16 +80,21 @@ class ArchitectureTest(unittest.TestCase):
                     if target.startswith(f"{subsystem}.") and not inside:
                         self.fail(f"{importer} umgeht die Fassade: {target}")
 
+    def test_services_receive_configuration_instead_of_reading_it(self) -> None:
+        for importer, targets in import_graph().items():
+            if importer == SERVICES or importer.startswith(f"{SERVICES}."):
+                for target in sorted(targets & CONFIGURATION_MODULES):
+                    self.fail(f"{importer} liest Konfiguration selbst: {target}")
+
     def test_foundation_packages_import_without_environment(self) -> None:
         code = (
             "import app.domain.ports, app.domain.priority, app.models.mondoo, "
             "app.core.webhook_signature"
         )
-        env = {"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(ROOT)}
         result = subprocess.run(
             [sys.executable, "-c", code],
             cwd=ROOT / "tests",
-            env=env,
+            env=isolated_env(),
             capture_output=True,
             text=True,
             check=False,

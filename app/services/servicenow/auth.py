@@ -6,9 +6,9 @@ from typing import Optional
 
 import httpx
 
-from app.core.config import settings
 from app.core.exceptions import ServiceNowAuthError
 from app.core.logging import logger
+from app.services.servicenow.config import ServiceNowConfig
 from app.services.servicenow.constants import (
     PATH_OAUTH_TOKEN,
     TOKEN_EXPIRY_MARGIN_SECONDS,
@@ -28,9 +28,11 @@ class ServiceNowAuth:
     geteilt, damit das Token wiederverwendet wird.
     """
 
-    def __init__(self, http_client: httpx.AsyncClient, base_url: str) -> None:
+    def __init__(
+        self, http_client: httpx.AsyncClient, config: ServiceNowConfig
+    ) -> None:
         self._http_client = http_client
-        self._base_url = base_url
+        self._config = config
         self._token: Optional[str] = None
         self._token_expires_at = 0.0
         self._lock = asyncio.Lock()
@@ -38,19 +40,19 @@ class ServiceNowAuth:
     @property
     def base_url(self) -> str:
         """Basis-URL der Instanz, zu der das Token gehoert."""
-        return self._base_url
+        return self._config.base_url
 
     @property
     def uses_oauth(self) -> bool:
         """True im OAuth-Modus, False bei Basic Auth."""
-        return settings.uses_oauth
+        return self._config.use_oauth
 
     def basic_auth(self) -> Optional[httpx.BasicAuth]:
         """httpx-Auth-Objekt fuer Basic Auth, ``None`` im OAuth-Modus."""
         if self.uses_oauth:
             return None
         return httpx.BasicAuth(
-            settings.SNOW_USER, settings.SNOW_PASSWORD.get_secret_value()
+            self._config.user, self._config.password.get_secret_value()
         )
 
     async def headers(self, content_type: str = "application/json") -> dict[str, str]:
@@ -84,17 +86,18 @@ class ServiceNowAuth:
             return token
 
     async def _fetch_token(self) -> tuple[str, float]:
+        config = self._config
         data = {
             "grant_type": "password",
-            "client_id": settings.SNOW_CLIENT_ID,
-            "client_secret": settings.SNOW_CLIENT_SECRET.get_secret_value(),
-            "username": settings.SNOW_USER,
-            "password": settings.SNOW_PASSWORD.get_secret_value(),
+            "client_id": config.client_id,
+            "client_secret": config.client_secret.get_secret_value(),
+            "username": config.user,
+            "password": config.password.get_secret_value(),
         }
         drop_session_cookies(self._http_client)
         try:
             response = await self._http_client.post(
-                f"{self._base_url}{PATH_OAUTH_TOKEN}",
+                f"{config.base_url}{PATH_OAUTH_TOKEN}",
                 data=data,
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
@@ -105,18 +108,29 @@ class ServiceNowAuth:
 
         if response.status_code != 200:
             logger.error(
-                f"OAuth-Token von {self._base_url} abgelehnt: HTTP "
+                f"OAuth-Token von {config.base_url} abgelehnt: HTTP "
                 f"{response.status_code}, {_oauth_error_details(response)}, "
-                f"Benutzer '{settings.SNOW_USER}', Leerzeichen am Rand in: "
-                f"{_credentials_with_edge_whitespace()}"
+                f"Benutzer '{config.user}', Leerzeichen am Rand in: "
+                f"{_credentials_with_edge_whitespace(config)}"
             )
             raise ServiceNowAuthError(
                 f"OAuth Token-Generierung fehlgeschlagen ({response.status_code})",
                 upstream_status=response.status_code,
             )
 
-        body = response.json()
-        token = body.get("access_token")
+        try:
+            body = response.json()
+        except ValueError as exc:
+            # Rumpf bewusst nicht ins Log: Token-Antworten koennen Geheimwerte tragen.
+            logger.error(
+                f"OAuth-Antwort von {config.base_url} ist kein JSON "
+                f"(HTTP {response.status_code})."
+            )
+            raise ServiceNowAuthError(
+                f"OAuth-Antwort ist kein JSON (HTTP {response.status_code})",
+                upstream_status=response.status_code,
+            ) from exc
+        token = body.get("access_token") if isinstance(body, dict) else None
         if not token:
             raise ServiceNowAuthError("OAuth-Antwort enthaelt kein access_token")
 
@@ -136,13 +150,17 @@ def _oauth_error_details(response: httpx.Response) -> str:
     return f"error={error!r}, error_description={description!r}"
 
 
-def _credentials_with_edge_whitespace() -> str:
-    """Welche Zugangsdaten Leerzeichen/Umbrueche am Rand haben (ohne Werte)."""
+def _credentials_with_edge_whitespace(config: ServiceNowConfig) -> str:
+    """Welche Zugangsdaten Leerzeichen/Umbrueche am Rand haben (ohne Werte).
+
+    Genannt werden die Namen der Umgebungsvariablen, damit der Fehler im
+    Key Vault bzw. in den App-Settings auffindbar ist.
+    """
     credentials = {
-        "SNOW_CLIENT_ID": settings.SNOW_CLIENT_ID,
-        "SNOW_CLIENT_SECRET": settings.SNOW_CLIENT_SECRET.get_secret_value(),
-        "SNOW_USER": settings.SNOW_USER,
-        "SNOW_PASSWORD": settings.SNOW_PASSWORD.get_secret_value(),
+        "SNOW_CLIENT_ID": config.client_id,
+        "SNOW_CLIENT_SECRET": config.client_secret.get_secret_value(),
+        "SNOW_USER": config.user,
+        "SNOW_PASSWORD": config.password.get_secret_value(),
     }
     affected = [name for name, value in credentials.items() if value != value.strip()]
     return ", ".join(affected) or "keine"

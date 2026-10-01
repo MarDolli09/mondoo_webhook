@@ -1,30 +1,16 @@
 """Fachliche Stammdaten: Spaces, Personen, Prioritaeten und Klassifikation.
 
-Die Tabellen in ``MasterData`` lassen sich wie bisher per Umgebungsvariable
-(JSON) ueberschreiben. Die Konstanten sind feste Organisationsdaten.
+Die Tabellen in ``MasterData`` lassen sich per Umgebungsvariable (JSON)
+ueberschreiben; der Startpunkt (``app.api.dependencies``) reicht sie an die
+Teilsysteme weiter. Feste Organisationsdaten der ServiceNow-Anbindung stehen in
+``app.services.servicenow.constants``.
 """
 
 from pydantic_settings import BaseSettings
 
 from app.core.config import SETTINGS_CONFIG
 
-__all__ = [
-    "AUTOMATED_CREATOR_LABEL",
-    "FIXED_WATCHERS",
-    "SNOW_INTEGRATION_USER",
-    "MasterData",
-    "master_data",
-]
-
-# Technischer ServiceNow-Benutzer: "Geoeffnet von" und Fallback fuer
-# "Angefordert fuer".
-SNOW_INTEGRATION_USER = "mosca.rest"
-
-# Beobachter jedes neuen RITM; aufgeloest ueber SNOW_USER_LOOKUP_FIELDS.
-FIXED_WATCHERS: tuple[str, ...] = ("lars.siefert@mosca.com",)
-
-# Anzeigename des Erstellers bei automatisch erzeugten Mondoo-Tickets.
-AUTOMATED_CREATOR_LABEL = "Mondoo-Drift"
+__all__ = ["MasterData", "master_data"]
 
 _MONDOO_USER_MRN = "//captain.api.mondoo.app/users/"
 
@@ -32,7 +18,8 @@ _MONDOO_USER_MRN = "//captain.api.mondoo.app/users/"
 class MasterData(BaseSettings):
     """Ueberschreibbare Zuordnungstabellen."""
 
-    # Mondoo-Space-ID -> Anzeigename des Space
+    # Mondoo-Space-ID -> Anzeigename des Space. Der Name ist historisch; er bleibt,
+    # weil er zugleich der Name der Umgebungsvariablen zum Ueberschreiben ist.
     CATEGORY_MAP: dict[str, str] = {
         "eu-elastic-hodgkin-413342": "Azure",
         "eu-peaceful-elgamal-693498": "Microsoft-Defender-for-Cloud",

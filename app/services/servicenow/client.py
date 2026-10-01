@@ -2,16 +2,16 @@
 
 from typing import Any, Optional
 
-from app.core.config import settings
 from app.core.exceptions import ServiceNowAPIError
 from app.core.logging import logger
-from app.core.master_data import SNOW_INTEGRATION_USER
-from app.domain.ports import TicketSynchronizer
+from app.domain.ports import SyncAction, SyncOutcome, TicketSynchronizer
 from app.models.case import NormalizedCase
 from app.models.mondoo import CLOSING_EVENTS
 from app.services.servicenow.api import ServiceNowAPI
+from app.services.servicenow.config import ServiceNowConfig
 from app.services.servicenow.constants import (
     CATALOG_TASK_WORKFLOW_TITLE_PREFIX,
+    SNOW_INTEGRATION_USER,
     TERMINAL_STATES,
 )
 from app.services.servicenow.mapping import (
@@ -29,13 +29,14 @@ __all__ = ["ServiceNowClient"]
 class ServiceNowClient(TicketSynchronizer):
     """Legt RITMs ueber den Service Catalog an und pflegt sie bei Folgeereignissen."""
 
-    def __init__(self, api: ServiceNowAPI) -> None:
+    def __init__(self, api: ServiceNowAPI, config: ServiceNowConfig) -> None:
         self._api = api
+        self._config = config
 
-    async def synchronize(self, case: NormalizedCase) -> dict[str, Any]:
+    async def synchronize(self, case: NormalizedCase) -> SyncOutcome:
         """Anlegen, Aktualisieren oder Verwerfen je nach vorhandenem RITM."""
         case_correlation_id = correlation_id(case)
-        existing = await self._api.find_request_item_by_correlation_id(
+        existing = await self._api.request_items.find_by_correlation_id(
             case_correlation_id
         )
 
@@ -45,7 +46,7 @@ class ServiceNowClient(TicketSynchronizer):
                     f"Ereignis '{case.raw_event_type}' ohne bestehendes RITM "
                     f"zu '{case_correlation_id}'. Es wird kein Ticket angelegt."
                 )
-                return {"action": "skipped_closing_without_ritm"}
+                return SyncOutcome(SyncAction.SKIPPED_CLOSING_WITHOUT_TICKET)
 
             logger.info(
                 f"Kein RITM zu '{case_correlation_id}' vorhanden. "
@@ -59,7 +60,11 @@ class ServiceNowClient(TicketSynchronizer):
                 f"RITM {existing.get('number')} befindet sich im Endstatus "
                 f"(state={state}). Ereignis '{case.raw_event_type}' wird verworfen."
             )
-            return {**existing, "action": "skipped"}
+            return SyncOutcome(
+                SyncAction.SKIPPED_TERMINAL,
+                ticket_number=_text(existing.get("number")),
+                ticket_id=_text(existing.get("sys_id")),
+            )
 
         logger.info(
             f"Bestehendes RITM {existing.get('number')} gefunden. Starte Update."
@@ -70,14 +75,14 @@ class ServiceNowClient(TicketSynchronizer):
     # Anlegen
     # ------------------------------------------------------------------ #
 
-    async def _create(self, case: NormalizedCase) -> dict[str, Any]:
+    async def _create(self, case: NormalizedCase) -> SyncOutcome:
         # Ohne sysparm_requested_for traegt ServiceNow den angemeldeten Benutzer
         # ein. Im Namen eines anderen zu bestellen ist dort rollenpflichtig.
-        request_sys_id = await self._api.order_catalog_item(
-            build_catalog_variables(case),
-            requested_for_sys_id=settings.SNOW_REQUESTED_FOR_SYS_ID or None,
+        request_sys_id = await self._api.catalog.order(
+            build_catalog_variables(case, self._config.user_names),
+            requested_for_sys_id=self._config.requested_for_sys_id or None,
         )
-        ritm = await self._api.resolve_request_item(request_sys_id)
+        ritm = await self._api.request_items.find_for_request(request_sys_id)
         ritm_sys_id = ritm["sys_id"]
 
         body = build_create_fields(
@@ -85,20 +90,18 @@ class ServiceNowClient(TicketSynchronizer):
             opened_by_sys_id=await self._resolve_opened_by(),
             watcher_sys_ids=await self._resolve_watchers(case),
         )
-        updated = await self._api.patch_request_item(ritm_sys_id, body)
+        updated = await self._api.request_items.patch(ritm_sys_id, body)
 
         number = updated.get("number") or ritm.get("number")
         logger.info(f"RITM {number} schlank angelegt (Status: Offen).")
 
         await self._retitle_catalog_tasks(ritm_sys_id, str(number), ticket_title(case))
 
-        return {
-            **updated,
-            "number": number,
-            "sys_id": ritm_sys_id,
-            "request_sys_id": request_sys_id,
-            "action": "created",
-        }
+        return SyncOutcome(
+            SyncAction.CREATED,
+            ticket_number=_text(number),
+            ticket_id=_text(ritm_sys_id),
+        )
 
     async def _retitle_catalog_tasks(
         self, ritm_sys_id: str, ritm_number: str, title: str
@@ -111,7 +114,7 @@ class ServiceNowClient(TicketSynchronizer):
         davon nicht betroffen.
         """
         try:
-            tasks = await self._api.find_assigned_catalog_tasks(ritm_sys_id)
+            tasks = await self._api.catalog_tasks.find_assigned(ritm_sys_id)
             if not tasks:
                 logger.warning(
                     f"Kein SCTASK mit Assignment Group zu RITM {ritm_number} "
@@ -127,7 +130,7 @@ class ServiceNowClient(TicketSynchronizer):
                         f"und bleibt unveraendert."
                     )
                     continue
-                await self._api.patch_catalog_task(
+                await self._api.catalog_tasks.patch(
                     task["sys_id"], {"short_description": title}
                 )
                 logger.info(
@@ -141,7 +144,7 @@ class ServiceNowClient(TicketSynchronizer):
             )
 
     async def _resolve_opened_by(self) -> Optional[str]:
-        sys_id = await self._api.resolve_user_sys_id(SNOW_INTEGRATION_USER)
+        sys_id = await self._api.users.resolve_sys_id(SNOW_INTEGRATION_USER)
         if not sys_id:
             logger.warning(
                 f"Konnte User '{SNOW_INTEGRATION_USER}' in sys_user nicht finden."
@@ -150,8 +153,8 @@ class ServiceNowClient(TicketSynchronizer):
 
     async def _resolve_watchers(self, case: NormalizedCase) -> list[str]:
         sys_ids: list[str] = []
-        for identifier in watcher_identifiers(case):
-            sys_id = await self._api.resolve_user_sys_id(identifier)
+        for identifier in watcher_identifiers(case, self._config.user_names):
+            sys_id = await self._api.users.resolve_sys_id(identifier)
             if not sys_id:
                 logger.warning(
                     f"Beobachter '{identifier}' konnte in ServiceNow nicht "
@@ -165,11 +168,20 @@ class ServiceNowClient(TicketSynchronizer):
     # Aktualisieren
     # ------------------------------------------------------------------ #
 
-    async def _update(self, ritm_sys_id: str, case: NormalizedCase) -> dict[str, Any]:
-        updated = await self._api.patch_request_item(
+    async def _update(self, ritm_sys_id: str, case: NormalizedCase) -> SyncOutcome:
+        updated = await self._api.request_items.patch(
             ritm_sys_id, build_update_fields(case)
         )
         logger.info(
             f"RITM {updated.get('number')} aktualisiert (state={updated.get('state')})."
         )
-        return {**updated, "sys_id": ritm_sys_id, "action": "updated"}
+        return SyncOutcome(
+            SyncAction.UPDATED,
+            ticket_number=_text(updated.get("number")),
+            ticket_id=_text(ritm_sys_id),
+        )
+
+
+def _text(value: Any) -> Optional[str]:
+    """Feldwert eines ServiceNow-Datensatzes als Text, fehlend als ``None``."""
+    return None if value is None else str(value)

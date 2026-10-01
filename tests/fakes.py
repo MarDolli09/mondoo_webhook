@@ -108,6 +108,8 @@ class FakeBackends:
     lookup_status: int = 200
     order_status: int = 200
     task_status: int = 200
+    # Ziele, die statt JSON eine HTML-Seite liefern: "mondoo", "token", "lookup"
+    html_for: frozenset[str] = frozenset()
 
     def transport(self) -> httpx.MockTransport:
         """httpx-Transport, der alle Requests an diese Attrappen leitet."""
@@ -131,7 +133,7 @@ class FakeBackends:
 
         if str(request.url).startswith(MONDOO_ENDPOINT):
             self.requests.append(RecordedRequest("mondoo", "POST", "", {}, body))
-            return self._findings()
+            return _html_page() if "mondoo" in self.html_for else self._findings()
 
         self.requests.append(
             RecordedRequest(
@@ -143,7 +145,10 @@ class FakeBackends:
                 cookie=request.headers.get("cookie"),
             )
         )
-        response = self._servicenow(request.method, request.url.path, params, body)
+        if _html_target(request.url.path, params) in self.html_for:
+            response = _html_page()
+        else:
+            response = self._servicenow(request.method, request.url.path, params, body)
         # ServiceNow setzt bei jedem Aufruf ein Sitzungs-Cookie.
         response.headers["set-cookie"] = "JSESSIONID=ABC123; Path=/; HttpOnly"
         return response
@@ -233,6 +238,24 @@ class FakeBackends:
         task = next(t for t in self.catalog_tasks if t["sys_id"] == sys_id)
         task.update(body or {})
         return httpx.Response(200, json={"result": task})
+
+
+def _html_target(path: str, params: dict[str, str]) -> str:
+    """Ziel eines ServiceNow-Requests im Sinne von ``FakeBackends.html_for``."""
+    if path == "/oauth_token.do":
+        return "token"
+    if params.get("sysparm_query", "").startswith("correlation_id="):
+        return "lookup"
+    return ""
+
+
+def _html_page() -> httpx.Response:
+    """Antwort einer ruhenden Instanz: Status 200, aber HTML statt JSON."""
+    return httpx.Response(
+        200,
+        text="<html><body>Instance hibernating</body></html>",
+        headers={"content-type": "text/html"},
+    )
 
 
 async def post_webhooks(

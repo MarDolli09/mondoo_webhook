@@ -1,10 +1,7 @@
 """Bewertung eines Findings ueber die gefilterte Mondoo-Abfrage."""
 
-from typing import Optional
-
 import httpx
 
-from app.core.config import settings
 from app.core.exceptions import MondooAPIError
 from app.core.logging import logger
 from app.domain.identifiers import space_scope_mrn
@@ -23,15 +20,8 @@ NODES_PER_FINDING = 100
 class MondooGraphQLClient(FindingScoresLookup):
     """Bewertungsquelle auf Basis der Mondoo GraphQL-API."""
 
-    def __init__(
-        self, http_client: httpx.AsyncClient, api_key: Optional[str] = None
-    ) -> None:
-        key = (
-            api_key
-            if api_key is not None
-            else settings.MONDOO_API_KEY.get_secret_value()
-        )
-        self._api = MondooGraphQLAPI(http_client, (key or "").strip())
+    def __init__(self, http_client: httpx.AsyncClient, api_key: str) -> None:
+        self._api = MondooGraphQLAPI(http_client, api_key.strip())
 
     async def fetch_finding_scores(
         self, finding_mrn: str, scope_mrn: str = "", space_id: str = ""
@@ -42,7 +32,7 @@ class MondooGraphQLClient(FindingScoresLookup):
         Anreicherung ist optional: Jeder Fehler fuehrt zu ``NO_FINDING_SCORES``,
         der Case wird dann ohne Bewertung verarbeitet.
         """
-        if not self._api.is_configured or not finding_mrn:
+        if not finding_mrn:
             return NO_FINDING_SCORES
 
         scope_mrn = scope_mrn or (space_scope_mrn(space_id) if space_id else "")
@@ -57,6 +47,9 @@ class MondooGraphQLClient(FindingScoresLookup):
         except MondooAPIError as exc:
             logger.error(f"Abfrage fuer {finding_mrn} abgebrochen: {exc.message}")
         except Exception as exc:
+            # Bewusst breit: Ein unerwarteter Aufbau der Antwort darf den Webhook
+            # nicht scheitern lassen. Der Traceback steht im Log und loest als
+            # ERROR die Alarmierung aus.
             logger.error(
                 f"Unerwarteter Fehler beim Abruf der Bewertung fuer "
                 f"{finding_mrn}: {exc}",
