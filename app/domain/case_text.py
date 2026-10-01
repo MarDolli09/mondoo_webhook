@@ -9,6 +9,7 @@ __all__ = [
     "extract_risk_from_summary",
     "extract_ticket_url",
     "sanitize_url",
+    "strip_asset_suffix",
     "strip_mitigate_phrase",
 ]
 
@@ -23,6 +24,8 @@ CVE_PATTERN = re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE)
 MITIGATE_PHRASE_PATTERN = re.compile(
     r"^\s*(\[[A-Z]+\]\s*)?Mitigate\s+(?:vulnerability|advisory)\s+", re.IGNORECASE
 )
+# Mondoo haengt das Asset immer ans Ende: "… on SUBVWBN", "… on multiple assets"
+ASSET_SUFFIX_SEPARATOR = " on "
 
 _RATINGS = r"CRITICAL|HIGH|MEDIUM|LOW|NONE"
 
@@ -104,3 +107,13 @@ def strip_mitigate_phrase(title: str) -> str:
         return f"{tag} " if tag else ""
 
     return MITIGATE_PHRASE_PATTERN.sub(keep_severity_tag, title, count=1).strip()
+
+
+def strip_asset_suffix(title: str) -> str:
+    """Entfernt das Asset am Ende des Titels samt dem "on" davor.
+
+    Getrennt wird am letzten " on ", damit Pruefungen wie "Ensure 'Turn on …'
+    is set to …" vollstaendig bleiben.
+    """
+    head, separator, _ = title.rpartition(ASSET_SUFFIX_SEPARATOR)
+    return head.rstrip() if separator and head.strip() else title

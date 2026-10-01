@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 from app.core.logging import logger
 from app.core.master_data import AUTOMATED_CREATOR_LABEL, FIXED_WATCHERS, master_data
-from app.domain.case_text import strip_mitigate_phrase
+from app.domain.case_text import strip_asset_suffix, strip_mitigate_phrase
 from app.domain.priority import PRIORITY_SOURCE_DEFAULT
 from app.models.case import NormalizedCase
 from app.models.mondoo import MondooEventType
@@ -40,8 +40,12 @@ def correlation_id(case: NormalizedCase) -> str:
 
 
 def ticket_title(case: NormalizedCase) -> str:
-    """Tickettitel ``Mondoo - [SCHWEREGRAD] <Titel ohne "Mitigate …">``."""
-    title = f"{TICKET_TITLE_PREFIX}{strip_mitigate_phrase(case.title)}"
+    """Tickettitel ``Mondoo - [SCHWEREGRAD] <Finding>``.
+
+    Ohne "Mitigate vulnerability/advisory" und ohne das Asset ("on …") am Ende.
+    """
+    finding = strip_asset_suffix(strip_mitigate_phrase(case.title))
+    title = f"{TICKET_TITLE_PREFIX}{finding}"
     return _truncate(title, SHORT_DESCRIPTION_MAX)
 
 

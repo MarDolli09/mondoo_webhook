@@ -45,7 +45,7 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(variables["urgency"], "2")
         self.assertEqual(
             variables["mondoo_title"],
-            "Mondoo - [CRITICAL] CVE-2024-0056 on multiple assets",
+            "Mondoo - [CRITICAL] CVE-2024-0056",
         )
         self.assertEqual(variables["cvss_risk_rating"], "HIGH")
         (patch,) = backends.find("servicenow", "PATCH", "/sc_req_item/")
@@ -271,7 +271,7 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("cookie", header_log)
         order_log = next(m for m in captured.output if "order_now abgelehnt" in m)
         self.assertIn('"sysparm_quantity": "1"', order_log)
-        self.assertIn('"mondoo_title": "Mondoo - [CRITICAL] CVE-2024-0056', order_log)
+        self.assertIn('"mondoo_title": "Mondoo - [CRITICAL] CVE-2024-0056"', order_log)
         self.assertIn('"number_of_affected_assets": "4"', order_log)
 
     async def test_no_session_cookies_are_sent_to_servicenow(self) -> None:

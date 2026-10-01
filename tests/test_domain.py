@@ -5,7 +5,11 @@ import unittest
 
 import tests  # noqa: F401  (Dummy-Umgebung)
 from app.core.exceptions import PayloadParsingError
-from app.domain.case_text import extract_risk_from_summary, strip_mitigate_phrase
+from app.domain.case_text import (
+    extract_risk_from_summary,
+    strip_asset_suffix,
+    strip_mitigate_phrase,
+)
 from app.domain.finding_types import classify_finding_type, profile_for
 from app.domain.identifiers import (
     count_referenced_assets,
@@ -57,6 +61,22 @@ class CaseTextTest(unittest.TestCase):
         }
         for title, expected in cases.items():
             self.assertEqual(strip_mitigate_phrase(title), expected, title)
+
+    def test_asset_suffix_is_cut_at_the_last_on(self) -> None:
+        cases = {
+            "[HIGH] CVE-2026-1 on SUBVWBN": "[HIGH] CVE-2026-1",
+            "[HIGH] CVE-2026-1 on multiple assets": "[HIGH] CVE-2026-1",
+            # Ein "on" im Namen der Pruefung bleibt erhalten
+            "[LOW] Ensure 'Turn on Script Block Logging' is set to 'Enabled' "
+            "on multiple assets": (
+                "[LOW] Ensure 'Turn on Script Block Logging' is set to 'Enabled'"
+            ),
+            # Ohne Asset am Ende bleibt der Titel unveraendert
+            "[LOW] Rotate keys": "[LOW] Rotate keys",
+            "Patch on": "Patch on",
+        }
+        for title, expected in cases.items():
+            self.assertEqual(strip_asset_suffix(title), expected, title)
 
     def test_risk_rating_from_v2_sentence(self) -> None:
         text = "The combined risk is **HIGH** (72/100) for this asset."

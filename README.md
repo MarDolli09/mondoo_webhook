@@ -24,9 +24,11 @@ Risk-Werte aus der Mondoo GraphQL-API an und legt dazu Requested Items (RITM)
 5. Je Webhook entsteht ein JSON-Telemetriedatensatz
    (`mondoo_to_servicenow_processed`) mit `correlation_id` und `case_mrn`.
 
-Der Tickettitel lautet `Mondoo - <Mondoo-Titel>`; das Schweregrad-Tag bleibt,
-„Mitigate vulnerability“ bzw. „Mitigate advisory“ dahinter entfällt, z. B.
-`Mondoo - [HIGH] CVE-2026-9999 on M-VM-ProgrammingOld`.
+Der Tickettitel lautet `Mondoo - [SCHWEREGRAD] <Finding>`: „Mitigate
+vulnerability“ bzw. „Mitigate advisory“ und das Asset am Ende („on SUBVWBN“,
+„on multiple assets“) entfallen, z. B. wird
+`[CRITICAL] Mitigate advisory MONDOO-EOL-DOTNET-6 on multiple assets` zu
+`Mondoo - [CRITICAL] MONDOO-EOL-DOTNET-6`.
 Assignment Groups setzt ServiceNow selbst.
 
 ## ServiceNow-Mapping
@@ -35,7 +37,7 @@ Katalogformular „Mondoo Vulnerability“ (`order_now`), Reihenfolge wie im For
 
 | Formularfeld | Variable | Wert |
 |---|---|---|
-| Mondoo Title | `mondoo_title` | `Mondoo - [SCHWEREGRAD] <Titel ohne „Mitigate vulnerability/advisory“>` |
+| Mondoo Title | `mondoo_title` | `Mondoo - [SCHWEREGRAD] <Titel ohne „Mitigate …“ und ohne „on <Asset>“>` |
 | CVE | `cve` | CVE aus dem Titel, sonst ` / ` |
 | CVSS Score / CVSS Risk Rating | `cvss_score` / `cvss_risk_rating` | aus `cvss.value`/`cvss.rating` des Findings; die API liefert 0–100 (98 = 9.8), 0 bedeutet kein CVSS |
 | Mondoo Risk Rating / Score | `mondoo_risk_rating` / `mondoo_risk_score` | aus `riskValue`/`rating` des Findings (Skala 0–100), nur ohne API-Wert aus der AI-Summary |

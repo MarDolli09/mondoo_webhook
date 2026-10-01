@@ -52,11 +52,30 @@ def make_case(**overrides: object) -> NormalizedCase:
 
 
 class TitleTest(unittest.TestCase):
-    def test_title_keeps_severity_and_drops_mitigate_phrase(self) -> None:
-        self.assertEqual(
-            mapping.ticket_title(make_case()),
-            "Mondoo - [CRITICAL] CVE-2024-0056 on multiple assets",
-        )
+    def test_title_keeps_severity_and_drops_mitigate_phrase_and_asset(self) -> None:
+        # Originaltitel aus Mondoo und der erwartete Titel in ServiceNow
+        cases = {
+            "[CRITICAL] Mitigate advisory MONDOO-EOL-ORACLE-JDK-18 on SUBVWBN": (
+                "Mondoo - [CRITICAL] MONDOO-EOL-ORACLE-JDK-18"
+            ),
+            "[CRITICAL] Mitigate advisory MONDOO-EOL-DOTNET-6 on multiple assets": (
+                "Mondoo - [CRITICAL] MONDOO-EOL-DOTNET-6"
+            ),
+            "[CRITICAL] Ensure 'Configures LSASS to run as a protected process' is "
+            "set to 'Enabled: Enabled with UEFI Lock' on multiple assets": (
+                "Mondoo - [CRITICAL] Ensure 'Configures LSASS to run as a protected "
+                "process' is set to 'Enabled: Enabled with UEFI Lock'"
+            ),
+            "[CRITICAL] Mitigate advisory August 11, 2026—KB5120233 (OS Build "
+            "26100.33296) on multiple assets": (
+                "Mondoo - [CRITICAL] August 11, 2026—KB5120233 (OS Build 26100.33296)"
+            ),
+            "[CRITICAL] Mitigate vulnerability CVE-2026-49179 on multiple assets": (
+                "Mondoo - [CRITICAL] CVE-2026-49179"
+            ),
+        }
+        for title, expected in cases.items():
+            self.assertEqual(mapping.ticket_title(make_case(title=title)), expected)
 
     def test_long_title_is_truncated_to_short_description_limit(self) -> None:
         title = mapping.ticket_title(make_case(title="[LOW] " + "x" * 300))

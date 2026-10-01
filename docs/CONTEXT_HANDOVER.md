@@ -171,7 +171,7 @@ nicht „Mission-Critical".
 | `app/domain/scores.py` | CVSS- und Risk-Skalen, Ergebnistyp `FindingScores` |
 | `app/domain/priority.py` | Urgency/Impact samt Herkunft |
 | `app/domain/finding_types.py` | Klassifikation und Verarbeitungsprofile je Typ |
-| `app/domain/case_text.py` | Auswertung der AI-Summary, Tickettitel ohne „Mitigate vulnerability/advisory“ |
+| `app/domain/case_text.py` | Auswertung der AI-Summary, Tickettitel ohne „Mitigate …“ und ohne Asset |
 | `app/domain/identifiers.py` | MRNs, Space-IDs, Identitäten, Mondoo-Links |
 | `app/models/mondoo.py` | Eingangsmodell des Webhooks |
 | `app/models/case.py` | `NormalizedCase` als interne Zwischenform |
@@ -361,11 +361,17 @@ beim Deployment sichtbar machen statt erst beim ersten Webhook.
   Abfrage ab (Vorfall 29.09.); ein Test in `tests/test_domain.py` sichert das ab.
   Neue Fragmente mit Feldern, die es in mehreren Typen gibt, brauchen im
   Zweifel ebenfalls einen Alias.
-- **Tickettitel** (01.10.): `Mondoo - [SCHWEREGRAD] <Rest>`. Das Schweregrad-Tag
-  bleibt; „Mitigate vulnerability“ (Vulnerabilities) bzw. „Mitigate advisory“
-  (Advisories, End-of-Life) direkt dahinter entfällt, Fehlkonfigurationen
-  bleiben unverändert (`strip_mitigate_phrase`). Gilt nur für neue RITMs, Updates
-  ändern die Short Description bestehender RITMs nicht.
+- **Tickettitel** (01.10.): `Mondoo - [SCHWEREGRAD] <Finding>`. Das
+  Schweregrad-Tag bleibt; „Mitigate vulnerability“ (Vulnerabilities) bzw.
+  „Mitigate advisory“ (Advisories, End-of-Life) direkt dahinter entfällt
+  (`strip_mitigate_phrase`, `1531f67`). Bei allen Typen entfällt außerdem das
+  Asset am Ende samt „on“ (`strip_asset_suffix`), getrennt am **letzten**
+  „ on “, damit Prüfungen wie „Ensure 'Turn on …' is set to …“ vollständig
+  bleiben. Beispiel: `[CRITICAL] Mitigate advisory MONDOO-EOL-ORACLE-JDK-18 on
+  SUBVWBN` → `Mondoo - [CRITICAL] MONDOO-EOL-ORACLE-JDK-18`. Welche Assets
+  betroffen sind, steht nur noch in `number_of_affected_assets` und in Mondoo.
+  Gilt nur für neue RITMs, Updates ändern die Short Description bestehender
+  RITMs nicht.
 - **Kein CVSS bei End-of-Life, auch wenn die Mondoo-Oberfläche 10.0 zeigt.**
   Bei `MONDOO-EOL-NUMPY-1-26` zeigt die CVSS-Kachel „10.0", das Info-Fenster
   daneben aber „No CVSS data available for this vulnerability or advisory".
