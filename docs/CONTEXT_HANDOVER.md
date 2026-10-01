@@ -285,12 +285,30 @@ nicht „Mission-Critical".
   `mondoo_title` seit 01.10. nicht mehr (siehe „Bewusste Entscheidungen“). Im
   Formular auf `bmsptest` und vor dem Livegang auf `bmsp` muss das Feld noch
   gelöscht werden, sonst bleibt es in jedem RITM leer.
-- **Short Description des Catalog Task** („Mondoo Vulnerability - Windows
-  Clients") setzt der Flow/Workflow des Katalogelements, nicht die App. Die App
+- **Short Description des Catalog Task** („Mondoo Vulnerability - <Space>“,
+  z. B. „… - Server“) setzt ein Workflow aus der Katalogvariable
+  `mondoo_space`. **Ein weiterer Workflow bestimmt daraus die Assignment
+  Group**, der Text darf beim Anlegen also nicht geändert werden. Plan des
+  Vorgesetzten (01.10.): Task normal anlegen lassen und die Short Description
+  kurz danach mit dem Tickettitel des RITM überschreiben. Umsetzung in der App
+  vorgeschlagen: nach dem RITM-PATCH `sc_task` mit `request_item` = RITM und
+  gesetzter Assignment Group suchen (kurz wiederholen), nur Tasks mit Text
+  „Mondoo Vulnerability…“ überschreiben, bei Zeitüberschreitung Warnung.
+  Vorher beim Admin klären: Rechte von `mosca.rest` auf `sc_task`, Zeitpunkt
+  der Gruppenzuordnung, keine Neuberechnung bei Änderung der Short
+  Description. Bisheriger Stand dazu: Der Flow/Workflow des
+  Katalogelements setzt den Text, nicht die App. Die App
   schreibt nur `sc_req_item` (Short Description = Tickettitel per PATCH
   nach der Bestellung). Seit `mondoo_title` entfallen ist, kann der Flow den
   Mondoo-Titel nicht übernehmen: Er läuft bei der Bestellung, also vor dem
-  PATCH. Der Task behält den festen Text.
+  PATCH. Der Task behält den festen Text. Wege, den Titel in den Task zu
+  bringen (offen, 01.10.): (A) Business Rules in ServiceNow, eine auf
+  `sc_req_item` (Short Description an Tasks weitergeben) und eine auf `sc_task`
+  (beim Anlegen vom RITM übernehmen), empfohlen und Admin-Thema; (B)
+  `mondoo_title` als verstecktes Feld zurück, mit „Map to field“ auf Short
+  Description, dann nutzt der Flow den Titel; (C) die App ändert `sc_task`
+  selbst, nicht empfohlen (Task existiert evtl. noch nicht, Schreibrecht
+  nötig, Flow kann überschreiben).
 - **`mondoo_mrn` ohne „Map to field"**: Die `correlation_id` setzt erst der PATCH
   nach der Bestellung. Schlägt der fehl, entsteht beim nächsten Ereignis ein
   zweites Ticket.
@@ -560,6 +578,10 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
 - [x] `mondoo_title` aus dem Code gestrichen (01.10.).
 - [ ] Feld *Mondoo Title* aus dem Katalogformular entfernen (`bmsptest`, vor
       dem Livegang `bmsp`).
+- [ ] SCTASK-Titel: beim Admin Rechte (`sc_task` lesen/schreiben), Zeitpunkt
+      der Assignment Group und fehlende Neuberechnung bestätigen lassen, dann
+      Überschreiben in der App umsetzen (Abschnitt 5, „Short Description des
+      Catalog Task“).
 - [ ] In ServiceNow „Map to field" für die Variablen `urgency` → Urgency und
       `impact` → Impact aktivieren (`bmsptest` und vor dem Livegang `bmsp`).
 - [ ] Optional: Getrennte Ressourcengruppen oder ein Deployment-Slot für Test
