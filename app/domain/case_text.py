@@ -9,7 +9,7 @@ __all__ = [
     "extract_risk_from_summary",
     "extract_ticket_url",
     "sanitize_url",
-    "strip_severity_prefix",
+    "strip_mitigate_phrase",
 ]
 
 TICKET_URL_PATTERN = re.compile(
@@ -18,7 +18,11 @@ TICKET_URL_PATTERN = re.compile(
 )
 URL_PATTERN = re.compile(r"https?://[^\s\",<>\)]+")
 CVE_PATTERN = re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE)
-SEVERITY_PREFIX_PATTERN = re.compile(r"^\s*\[[A-Z]+\]\s*")
+# "[HIGH] Mitigate vulnerability CVE-…" bzw. "[MEDIUM] Mitigate advisory …";
+# Fehlkonfigurationen beginnen nie so und bleiben unveraendert.
+MITIGATE_PHRASE_PATTERN = re.compile(
+    r"^\s*(\[[A-Z]+\]\s*)?Mitigate\s+(?:vulnerability|advisory)\s+", re.IGNORECASE
+)
 
 _RATINGS = r"CRITICAL|HIGH|MEDIUM|LOW|NONE"
 
@@ -88,6 +92,15 @@ def extract_risk_from_summary(description: str) -> tuple[Optional[str], Optional
     return None, None
 
 
-def strip_severity_prefix(title: str) -> str:
-    """Entfernt ein fuehrendes Schweregrad-Tag wie ``[CRITICAL]`` aus dem Titel."""
-    return SEVERITY_PREFIX_PATTERN.sub("", title, count=1)
+def strip_mitigate_phrase(title: str) -> str:
+    """Entfernt "Mitigate vulnerability/advisory" hinter dem Schweregrad-Tag.
+
+    ``[HIGH] Mitigate vulnerability CVE-2026-1 on X`` wird zu
+    ``[HIGH] CVE-2026-1 on X``; das Tag bleibt erhalten.
+    """
+
+    def keep_severity_tag(match: "re.Match[str]") -> str:
+        tag = (match.group(1) or "").strip()
+        return f"{tag} " if tag else ""
+
+    return MITIGATE_PHRASE_PATTERN.sub(keep_severity_tag, title, count=1).strip()

@@ -171,7 +171,7 @@ nicht „Mission-Critical".
 | `app/domain/scores.py` | CVSS- und Risk-Skalen, Ergebnistyp `FindingScores` |
 | `app/domain/priority.py` | Urgency/Impact samt Herkunft |
 | `app/domain/finding_types.py` | Klassifikation und Verarbeitungsprofile je Typ |
-| `app/domain/case_text.py` | Auswertung der AI-Summary, Titel ohne Schweregrad-Tag |
+| `app/domain/case_text.py` | Auswertung der AI-Summary, Tickettitel ohne „Mitigate vulnerability/advisory“ |
 | `app/domain/identifiers.py` | MRNs, Space-IDs, Identitäten, Mondoo-Links |
 | `app/models/mondoo.py` | Eingangsmodell des Webhooks |
 | `app/models/case.py` | `NormalizedCase` als interne Zwischenform |
@@ -279,7 +279,7 @@ nicht „Mission-Critical".
   auf `TYPE_CLOSED`; die Abschlussnotiz nennt Ausnahmen bereits.
 - **Short Description des Catalog Task** („Mondoo Vulnerability - Windows
   Clients") setzt der Flow/Workflow des Katalogelements, nicht die App. Die App
-  schreibt nur `sc_req_item` (Short Description = `Mondoo - <Titel>` per PATCH
+  schreibt nur `sc_req_item` (Short Description = Tickettitel per PATCH
   nach der Bestellung). Soll der Task den Mondoo-Titel tragen, im Flow die
   Katalogvariable `mondoo_title` verwenden, nicht die Short Description des RITM:
   Der Flow läuft bei der Bestellung, also vor dem PATCH.
@@ -361,6 +361,11 @@ beim Deployment sichtbar machen statt erst beim ersten Webhook.
   Abfrage ab (Vorfall 29.09.); ein Test in `tests/test_domain.py` sichert das ab.
   Neue Fragmente mit Feldern, die es in mehreren Typen gibt, brauchen im
   Zweifel ebenfalls einen Alias.
+- **Tickettitel** (01.10.): `Mondoo - [SCHWEREGRAD] <Rest>`. Das Schweregrad-Tag
+  bleibt; „Mitigate vulnerability“ (Vulnerabilities) bzw. „Mitigate advisory“
+  (Advisories, End-of-Life) direkt dahinter entfällt, Fehlkonfigurationen
+  bleiben unverändert (`strip_mitigate_phrase`). Gilt nur für neue RITMs, Updates
+  ändern die Short Description bestehender RITMs nicht.
 - **Kein CVSS bei End-of-Life, auch wenn die Mondoo-Oberfläche 10.0 zeigt.**
   Bei `MONDOO-EOL-NUMPY-1-26` zeigt die CVSS-Kachel „10.0", das Info-Fenster
   daneben aber „No CVSS data available for this vulnerability or advisory".

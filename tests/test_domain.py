@@ -5,7 +5,7 @@ import unittest
 
 import tests  # noqa: F401  (Dummy-Umgebung)
 from app.core.exceptions import PayloadParsingError
-from app.domain.case_text import extract_risk_from_summary, strip_severity_prefix
+from app.domain.case_text import extract_risk_from_summary, strip_mitigate_phrase
 from app.domain.finding_types import classify_finding_type, profile_for
 from app.domain.identifiers import (
     count_referenced_assets,
@@ -32,12 +32,31 @@ DEFAULT = ("3", "3")
 
 
 class CaseTextTest(unittest.TestCase):
-    def test_strip_severity_prefix_removes_only_leading_tag(self) -> None:
-        self.assertEqual(strip_severity_prefix("[CRITICAL] Patch host"), "Patch host")
-        self.assertEqual(strip_severity_prefix("[NONE] Ensure keys"), "Ensure keys")
-        self.assertEqual(
-            strip_severity_prefix("Patch [HIGH] host"), "Patch [HIGH] host"
-        )
+    def test_mitigate_phrase_is_dropped_and_severity_kept(self) -> None:
+        cases = {
+            # Vulnerability
+            "[HIGH] Mitigate vulnerability CVE-2026-9999 on M-VM-ProgrammingOld": (
+                "[HIGH] CVE-2026-9999 on M-VM-ProgrammingOld"
+            ),
+            # Advisory
+            "[MEDIUM] Mitigate advisory attr vulnerability on Testserver-Ubuntu": (
+                "[MEDIUM] attr vulnerability on Testserver-Ubuntu"
+            ),
+            # End-of-Life
+            "[CRITICAL] Mitigate advisory MONDOO-EOL-AZURE-DATA-STUDIO-1 on "
+            "multiple assets": (
+                "[CRITICAL] MONDOO-EOL-AZURE-DATA-STUDIO-1 on multiple assets"
+            ),
+            # Fehlkonfiguration: unveraendert
+            "[CRITICAL] Enable strict mode on multiple assets": (
+                "[CRITICAL] Enable strict mode on multiple assets"
+            ),
+            # Ohne Schweregrad-Tag und mit der Wendung mitten im Titel
+            "Mitigate advisory openssl on host": "openssl on host",
+            "[LOW] Fix: Mitigate advisory X": "[LOW] Fix: Mitigate advisory X",
+        }
+        for title, expected in cases.items():
+            self.assertEqual(strip_mitigate_phrase(title), expected, title)
 
     def test_risk_rating_from_v2_sentence(self) -> None:
         text = "The combined risk is **HIGH** (72/100) for this asset."

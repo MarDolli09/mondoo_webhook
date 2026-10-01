@@ -52,10 +52,10 @@ def make_case(**overrides: object) -> NormalizedCase:
 
 
 class TitleTest(unittest.TestCase):
-    def test_title_has_mondoo_prefix_without_severity(self) -> None:
+    def test_title_keeps_severity_and_drops_mitigate_phrase(self) -> None:
         self.assertEqual(
             mapping.ticket_title(make_case()),
-            "Mondoo - Mitigate vulnerability CVE-2024-0056 on multiple assets",
+            "Mondoo - [CRITICAL] CVE-2024-0056 on multiple assets",
         )
 
     def test_long_title_is_truncated_to_short_description_limit(self) -> None:
