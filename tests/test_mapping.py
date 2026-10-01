@@ -11,7 +11,6 @@ ALEXANDER = "//captain.api.mondoo.app/users/2nZF38ZPg7vhizUrgIHqRF1aUwu"
 
 # Variablen des ServiceNow-Formulars "Mondoo Vulnerability" in Formularreihenfolge
 FORM_VARIABLES = [
-    # "mondoo_title",  # Versuch 01.10.: wird nicht gesendet (mapping.py)
     "cve",
     "cvss_score",
     "cvss_risk_rating",
@@ -90,9 +89,6 @@ class CatalogVariablesTest(unittest.TestCase):
         self.assertEqual(variables["number_of_affected_assets"], "4")
         self.assertEqual((variables["urgency"], variables["impact"]), ("1", "1"))
         self.assertEqual(variables["created_by"], "Alexander Haller")
-        # Versuch 01.10.: mondoo_title wird nicht gesendet
-        # self.assertTrue(variables["mondoo_title"].startswith("Mondoo - "))
-        self.assertNotIn("mondoo_title", variables)
 
 
 class TaskFieldsTest(unittest.TestCase):

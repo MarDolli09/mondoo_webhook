@@ -224,9 +224,13 @@ nicht „Mission-Critical".
   29.09. (`c80a5e8`):** `build_create_fields` sendet
   `urgency`/`impact` wie die Katalogvariablen, immer, auch bei Quelle
   `default`. Updates lassen die Felder bei Quelle `default` weiterhin
-  unberührt, damit manuelle Änderungen erhalten bleiben. Noch offen: „Map to
-  field" in ServiceNow, damit die Werte schon bei der Bestellung stehen; ob
-  ServiceNow die Priority am RITM aus Urgency/Impact neu berechnet.
+  unberührt, damit manuelle Änderungen erhalten bleiben. Im Betrieb bestätigt
+  am 01.10. (RITM0043065): „Impact 2 - Medium was 3 - Low“ eine Sekunde nach
+  der Bestellung. Die Priority bleibt laut Aktivität bei 4 - Low, weil
+  ServiceNow sie am RITM nicht aus Urgency/Impact berechnet. Das ist ein
+  Admin-Thema in ServiceNow und wird von der App nicht angefasst (01.10.).
+  Noch offen: „Map to field" in ServiceNow, damit die Werte schon bei der
+  Bestellung stehen.
 - **Neuen Space anbinden.** Am 30.09. erledigt für den Space *Server*
   (`eu-nifty-mendeleev-113214`): eigene Webhook-Integration „ServiceNow“ auf
   denselben Endpunkt, mit demselben Signing Secret und Auth-Header. Die
@@ -277,20 +281,16 @@ nicht „Mission-Critical".
   „Automatically create tickets: disabled“ entsteht dann kein neues Ticket.
   Verbindliche Antwort nur über den Mondoo-Support. Die Middleware reagiert nur
   auf `TYPE_CLOSED`; die Abschlussnotiz nennt Ausnahmen bereits.
-- **Versuch: Bestellung ohne `mondoo_title`** (01.10., läuft). Die Zeile in
-  `build_catalog_variables` ist auskommentiert; den Titel setzt nur noch der
-  PATCH (`short_description`). Tests sind mit „Versuch 01.10.“ markiert. Zu
-  klären: Nimmt `order_now` die Bestellung ohne die Variable an? Hängt etwas
-  im Flow, im Task oder in Benachrichtigungen an `mondoo_title`? Zurücknehmen:
-  die markierten Zeilen wieder aktivieren. Bedenken: Ohne die Variable kann
-  der Flow dem Task keinen Mondoo-Titel geben (er läuft vor dem PATCH), und bei
-  gescheitertem PATCH hat das RITM gar keinen Titel.
+- **Feld *Mondoo Title* im Katalogformular entfernen.** Die App sendet
+  `mondoo_title` seit 01.10. nicht mehr (siehe „Bewusste Entscheidungen“). Im
+  Formular auf `bmsptest` und vor dem Livegang auf `bmsp` muss das Feld noch
+  gelöscht werden, sonst bleibt es in jedem RITM leer.
 - **Short Description des Catalog Task** („Mondoo Vulnerability - Windows
   Clients") setzt der Flow/Workflow des Katalogelements, nicht die App. Die App
   schreibt nur `sc_req_item` (Short Description = Tickettitel per PATCH
-  nach der Bestellung). Soll der Task den Mondoo-Titel tragen, im Flow die
-  Katalogvariable `mondoo_title` verwenden, nicht die Short Description des RITM:
-  Der Flow läuft bei der Bestellung, also vor dem PATCH.
+  nach der Bestellung). Seit `mondoo_title` entfallen ist, kann der Flow den
+  Mondoo-Titel nicht übernehmen: Er läuft bei der Bestellung, also vor dem
+  PATCH. Der Task behält den festen Text.
 - **`mondoo_mrn` ohne „Map to field"**: Die `correlation_id` setzt erst der PATCH
   nach der Bestellung. Schlägt der fehl, entsteht beim nächsten Ereignis ein
   zweites Ticket.
@@ -369,6 +369,16 @@ beim Deployment sichtbar machen statt erst beim ersten Webhook.
   Abfrage ab (Vorfall 29.09.); ein Test in `tests/test_domain.py` sichert das ab.
   Neue Fragmente mit Feldern, die es in mehreren Typen gibt, brauchen im
   Zweifel ebenfalls einen Alias.
+- **Mondoo-Risk vor CVSS** (01.10.): Urgency/Impact kommen zuerst aus dem
+  Mondoo Risk Rating, dann aus dem CVSS-Rating, dann aus dem Tag im Titel,
+  sonst Default (`determine_priority`). Anlass: RITM0043065 hatte Titel
+  `[CRITICAL]` und Risk 100/CRITICAL, wegen CVSS 7.8/HIGH aber nur 2/2. Ein
+  Rating ohne Eintrag in `PRIORITY_MAP` (etwa `NONE`) wird übersprungen.
+- **Keine Katalogvariable `mondoo_title`** (01.10.): Der Titel steht nur in der
+  Short Description des RITM (PATCH nach der Bestellung). Versuch mit
+  RITM0043065 bestätigt, dass `order_now` ohne die Variable funktioniert.
+  Folgen: Der Catalog Task kann den Mondoo-Titel nicht übernehmen; scheitert
+  der PATCH, hat das RITM keinen Mondoo-Titel.
 - **Tickettitel** (01.10.): `Mondoo - [SCHWEREGRAD] <Finding>`. Das
   Schweregrad-Tag bleibt; „Mitigate vulnerability“ (Vulnerabilities) bzw.
   „Mitigate advisory“ (Advisories, End-of-Life) direkt dahinter entfällt
@@ -516,9 +526,13 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
 - [ ] Vor dem Livegang das Katalogformular auf `bmsp` prüfen: sys_id und
       Variablennamen. Bei Abweichung die Zuordnung konfigurierbar machen.
 - [ ] „Map to field" für `mondoo_mrn` auf `correlation_id` aktivieren.
-- [ ] Urgency/Impact beim Anlegen (Abschnitt 5, `c80a5e8`): deployen, dann an
-      einem neuen RITM prüfen, dass Impact/Urgency sofort den Variablen
-      entsprechen und ob Priority mitzieht.
+- [x] Urgency/Impact beim Anlegen (`c80a5e8`) im Betrieb bestätigt
+      (RITM0043065, 01.10.).
+- [x] Priority am RITM (bleibt 4 - Low): Admin-Thema in ServiceNow, nicht
+      Teil der App (01.10.).
+- [x] Priorisierung entschieden: Mondoo-Risk vor CVSS (01.10.). Nach dem
+      Deployment an einem neuen RITM prüfen, z. B. Risk CRITICAL bei CVSS
+      HIGH → Urgency/Impact 1.
 - [x] E-Mail-Alarmierung bei Fehlern eingerichtet (Abschnitt 5,
       „Alarmierung").
 - [x] E-Mail-Adresse der Aktionsgruppe bestätigt („Überprüft", 30.09.).
@@ -543,9 +557,9 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
 - [ ] Optional: `request_completed` um Methode, Pfad (maskiert) und
       Statuscode ergänzen (`app/main.py`), damit Fehlzustellungen sofort
       erkennbar sind.
-- [ ] Versuch ohne `mondoo_title` auswerten (Abschnitt 5) und entscheiden:
-      Feld streichen (Formular und Code) oder zurücknehmen und „Map to field"
-      auf Short Description setzen.
+- [x] `mondoo_title` aus dem Code gestrichen (01.10.).
+- [ ] Feld *Mondoo Title* aus dem Katalogformular entfernen (`bmsptest`, vor
+      dem Livegang `bmsp`).
 - [ ] In ServiceNow „Map to field" für die Variablen `urgency` → Urgency und
       `impact` → Impact aktivieren (`bmsptest` und vor dem Livegang `bmsp`).
 - [ ] Optional: Getrennte Ressourcengruppen oder ein Deployment-Slot für Test

@@ -200,6 +200,18 @@ class PriorityTest(unittest.TestCase):
         self.assertEqual((title.urgency, title.source), ("2", "title"))
         self.assertEqual((default.urgency, default.source), ("3", "default"))
 
+    def test_mondoo_risk_takes_precedence_over_cvss(self) -> None:
+        # CVE-2026-65775: CVSS 7.8 (HIGH), Mondoo-Risk 100 (CRITICAL)
+        both = determine_priority(
+            "[CRITICAL] x", "HIGH", "CRITICAL", PRIORITY_MAP, DEFAULT
+        )
+        self.assertEqual(
+            (both.urgency, both.impact, both.source), ("1", "1", "mondoo_risk")
+        )
+        # Ein Rating ohne Zuordnung wird uebersprungen, dann gilt das CVSS
+        unmapped = determine_priority("x", "HIGH", "NONE", PRIORITY_MAP, DEFAULT)
+        self.assertEqual((unmapped.urgency, unmapped.source), ("2", "cvss"))
+
     def test_medium_title_counts_as_default(self) -> None:
         medium = determine_priority("[MEDIUM] x", None, None, PRIORITY_MAP, DEFAULT)
         self.assertEqual(medium.source, "default")

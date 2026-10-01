@@ -44,41 +44,33 @@ def determine_priority(
 ) -> Priority:
     """Ermittelt Urgency und Impact.
 
-    Reihenfolge: CVSS-Rating, Mondoo Risk Rating, Schweregrad-Tag im Titel
-    (z. B. ``[HIGH]``), Default. Ergibt der Titel den Default-Wert, lautet die
-    Herkunft ``default``.
+    Reihenfolge: Mondoo Risk Rating, CVSS-Rating, Schweregrad-Tag im Titel
+    (z. B. ``[HIGH]``), Default. Das Mondoo-Risk geht vor, weil es den Kontext
+    des Space beruecksichtigt (Exploits, Angriffsflaeche, Assets). Ein Rating
+    ohne Eintrag in ``priority_map`` (etwa ``NONE``) wird uebersprungen. Ergibt
+    der Titel den Default-Wert, lautet die Herkunft ``default``.
     """
-    effective_rating = cvss_rating or risk_rating
-    if cvss_rating:
-        source = PRIORITY_SOURCE_CVSS
-    elif risk_rating:
-        source = PRIORITY_SOURCE_MONDOO_RISK
-    else:
-        source = ""
-
-    urgency, impact, match = _map_priority(
-        title, effective_rating, priority_map, default_urgency_impact
+    ratings = (
+        (risk_rating, PRIORITY_SOURCE_MONDOO_RISK),
+        (cvss_rating, PRIORITY_SOURCE_CVSS),
     )
+    for rating, source in ratings:
+        key = (rating or "").upper()
+        if key in priority_map:
+            urgency, impact = priority_map[key]
+            return Priority(urgency, impact, source, PriorityMatch("rating", key))
 
-    if not source:
-        is_default = (urgency, impact) == tuple(default_urgency_impact)
-        source = PRIORITY_SOURCE_DEFAULT if is_default else PRIORITY_SOURCE_TITLE
-
+    urgency, impact, match = _map_title(title, priority_map, default_urgency_impact)
+    is_default = (urgency, impact) == tuple(default_urgency_impact)
+    source = PRIORITY_SOURCE_DEFAULT if is_default else PRIORITY_SOURCE_TITLE
     return Priority(urgency, impact, source, match)
 
 
-def _map_priority(
+def _map_title(
     title: str,
-    rating: Optional[str],
     priority_map: Mapping[str, tuple[str, str]],
     default_urgency_impact: tuple[str, str],
 ) -> tuple[str, str, PriorityMatch]:
-    if rating:
-        rating_upper = rating.upper()
-        if rating_upper in priority_map:
-            urgency, impact = priority_map[rating_upper]
-            return urgency, impact, PriorityMatch("rating", rating_upper)
-
     title_upper = title.upper()
     for severity, (urgency, impact) in priority_map.items():
         if f"[{severity}]" in title_upper:

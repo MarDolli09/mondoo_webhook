@@ -15,7 +15,7 @@ Risk-Werte aus der Mondoo GraphQL-API an und legt dazu Requested Items (RITM)
 3. `CaseParser` bestimmt den Finding-Typ, fragt die Bewertung des Findings
    über `findings(filter: {mrn})` im Scope des Space ab (ein Request je
    Finding, ein Knoten je betroffenem Asset, es gilt das höchste Risiko) und
-   priorisiert: CVSS-Rating → Mondoo Risk Rating → Schweregrad-Tag im Titel →
+   priorisiert: Mondoo Risk Rating → CVSS-Rating → Schweregrad-Tag im Titel →
    Default.
 4. `ServiceNowClient` sucht das RITM über `correlation_id` (= Case-MRN) und
    * bestellt ein neues Katalogformular, wenn keines existiert,
@@ -28,7 +28,8 @@ Der Tickettitel lautet `Mondoo - [SCHWEREGRAD] <Finding>`: „Mitigate
 vulnerability“ bzw. „Mitigate advisory“ und das Asset am Ende („on SUBVWBN“,
 „on multiple assets“) entfallen, z. B. wird
 `[CRITICAL] Mitigate advisory MONDOO-EOL-DOTNET-6 on multiple assets` zu
-`Mondoo - [CRITICAL] MONDOO-EOL-DOTNET-6`.
+`Mondoo - [CRITICAL] MONDOO-EOL-DOTNET-6`. Er steht nur in der Short
+Description des RITM; eine Katalogvariable dafür gibt es nicht.
 Assignment Groups setzt ServiceNow selbst.
 
 ## ServiceNow-Mapping
@@ -37,11 +38,10 @@ Katalogformular „Mondoo Vulnerability“ (`order_now`), Reihenfolge wie im For
 
 | Formularfeld | Variable | Wert |
 |---|---|---|
-| Mondoo Title | `mondoo_title` | `Mondoo - [SCHWEREGRAD] <Titel ohne „Mitigate …“ und ohne „on <Asset>“>` |
 | CVE | `cve` | CVE aus dem Titel, sonst ` / ` |
 | CVSS Score / CVSS Risk Rating | `cvss_score` / `cvss_risk_rating` | aus `cvss.value`/`cvss.rating` des Findings; die API liefert 0–100 (98 = 9.8), 0 bedeutet kein CVSS |
 | Mondoo Risk Rating / Score | `mondoo_risk_rating` / `mondoo_risk_score` | aus `riskValue`/`rating` des Findings (Skala 0–100), nur ohne API-Wert aus der AI-Summary |
-| Urgency / Impact | `urgency` / `impact` | `1` (Critical) bis `4` (Low) |
+| Urgency / Impact | `urgency` / `impact` | `1` (Critical) bis `4` (Low), aus Mondoo Risk Rating, sonst CVSS-Rating, sonst Titel |
 | Mondoo Space | `mondoo_space` | Anzeigename laut `CATEGORY_MAP` |
 | Finding type | `finding_type` | `vulnerability`, `advisories`, `end-of-life`, `misconfiguration`, `other` |
 | Mondoo Ticket URL | `mondoo_ticket_url` | Link auf den Case in Mondoo |
