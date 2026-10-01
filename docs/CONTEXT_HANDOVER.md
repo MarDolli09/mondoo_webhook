@@ -1,10 +1,12 @@
 # Project Context Handover
 
-Stand: 29.09.2026, Commit `c80a5e8`. Der Fix für die von Mondoo abgelehnte
-Abfrage (Abschnitt 3) ist **deployt und für alle drei Finding-Typen geprüft**
-(CVE, Fehlkonfiguration, End-of-Life). Urgency/Impact beim Anlegen ist
-committet, die Prüfung am neuen RITM steht aus. **E-Mail-Alarmierung bei
-Fehlern ist eingerichtet** (Abschnitt 5, „Alarmierung").
+Stand: 01.10.2026, Commit `d936cef`. Laut Test vom 01.10. funktionieren
+Anlegen und Schließen von Tickets (auch automatisch) wie erwartet; ob der
+SCTASK den Tickettitel samt richtiger Assignment Group trägt, steht in der
+Checkliste noch offen. **E-Mail-Alarmierung
+bei Fehlern ist eingerichtet** (Abschnitt 5, „Alarmierung"). Vor dem Aufräumen
+von Repo und Code gesichert im Branch `backup/pre-cleanup-2026-10-01`
+(`d936cef`).
 
 ## 1. Executive Summary & Project Goal
 
