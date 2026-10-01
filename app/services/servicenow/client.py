@@ -43,21 +43,18 @@ class ServiceNowClient(TicketSynchronizer):
         if existing is None:
             if case.event_type in CLOSING_EVENTS:
                 logger.info(
-                    f"Ereignis '{case.raw_event_type}' ohne bestehendes RITM "
-                    f"zu '{case_correlation_id}'. Es wird kein Ticket angelegt."
+                    f"Ereignis '{case.raw_event_type}' ohne bestehendes RITM. "
+                    f"Es wird kein Ticket angelegt."
                 )
                 return SyncOutcome(SyncAction.SKIPPED_CLOSING_WITHOUT_TICKET)
 
-            logger.info(
-                f"Kein RITM zu '{case_correlation_id}' vorhanden. "
-                f"Lege neuen Request an."
-            )
+            logger.info("Kein RITM zum Case vorhanden, bestelle neuen Request.")
             return await self._create(case)
 
         state = str(existing.get("state", ""))
         if state in TERMINAL_STATES:
             logger.info(
-                f"RITM {existing.get('number')} befindet sich im Endstatus "
+                f"{existing.get('number')} befindet sich im Endstatus "
                 f"(state={state}). Ereignis '{case.raw_event_type}' wird verworfen."
             )
             return SyncOutcome(
@@ -66,9 +63,7 @@ class ServiceNowClient(TicketSynchronizer):
                 ticket_id=_text(existing.get("sys_id")),
             )
 
-        logger.info(
-            f"Bestehendes RITM {existing.get('number')} gefunden. Starte Update."
-        )
+        logger.debug(f"{existing.get('number')} gefunden. Starte Update.")
         return await self._update(existing["sys_id"], case)
 
     # ------------------------------------------------------------------ #
@@ -93,9 +88,10 @@ class ServiceNowClient(TicketSynchronizer):
         updated = await self._api.request_items.patch(ritm_sys_id, body)
 
         number = updated.get("number") or ritm.get("number")
-        logger.info(f"RITM {number} schlank angelegt (Status: Offen).")
+        title = ticket_title(case)
+        logger.info(f"{number} angelegt (Status Offen): {title}")
 
-        await self._retitle_catalog_tasks(ritm_sys_id, str(number), ticket_title(case))
+        await self._retitle_catalog_tasks(ritm_sys_id, str(number), title)
 
         return SyncOutcome(
             SyncAction.CREATED,
@@ -117,7 +113,7 @@ class ServiceNowClient(TicketSynchronizer):
             tasks = await self._api.catalog_tasks.find_assigned(ritm_sys_id)
             if not tasks:
                 logger.warning(
-                    f"Kein SCTASK mit Assignment Group zu RITM {ritm_number} "
+                    f"Kein SCTASK mit Assignment Group zu {ritm_number} "
                     f"gefunden. Die Short Description des Tasks bleibt unveraendert."
                 )
                 return
@@ -126,7 +122,7 @@ class ServiceNowClient(TicketSynchronizer):
                 current = str(task.get("short_description") or "")
                 if not current.startswith(CATALOG_TASK_WORKFLOW_TITLE_PREFIX):
                     logger.info(
-                        f"SCTASK {task.get('number')} traegt bereits '{current}' "
+                        f"{task.get('number')} traegt bereits '{current}' "
                         f"und bleibt unveraendert."
                     )
                     continue
@@ -134,12 +130,11 @@ class ServiceNowClient(TicketSynchronizer):
                     task["sys_id"], {"short_description": title}
                 )
                 logger.info(
-                    f"SCTASK {task.get('number')}: '{current}' durch Tickettitel "
-                    f"ersetzt."
+                    f"{task.get('number')}: '{current}' durch Tickettitel ersetzt."
                 )
         except ServiceNowAPIError as exc:
             logger.warning(
-                f"Short Description der SCTASKs zu RITM {ritm_number} nicht "
+                f"Short Description der SCTASKs zu {ritm_number} nicht "
                 f"gesetzt: {exc.message}"
             )
 
@@ -173,7 +168,7 @@ class ServiceNowClient(TicketSynchronizer):
             ritm_sys_id, build_update_fields(case)
         )
         logger.info(
-            f"RITM {updated.get('number')} aktualisiert (state={updated.get('state')})."
+            f"{updated.get('number')} aktualisiert (state={updated.get('state')})."
         )
         return SyncOutcome(
             SyncAction.UPDATED,

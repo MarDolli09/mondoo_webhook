@@ -1,6 +1,7 @@
 """Ende-zu-Ende: Webhook -> Parsing -> ServiceNow gegen Attrappen."""
 
 import copy
+import json
 import logging
 import os
 import time
@@ -57,6 +58,38 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(backends.find("servicenow", "GET", "sys_user_group"), [])
         self.assertNotIn("sysparm_requested_for", order.body)
+
+    async def test_delivery_writes_one_line_per_step(self) -> None:
+        receiver_logger = logging.getLogger("mondoo-receiver")
+        receiver_logger.disabled = False
+        try:
+            with self.assertLogs(receiver_logger, level="DEBUG") as captured:
+                await post_webhooks(
+                    FakeBackends(finding_nodes=[CVE_NODE]),
+                    [load_fixture("case_created_vulnerability.json")],
+                )
+        finally:
+            receiver_logger.disabled = True
+
+        messages = [record.getMessage() for record in captured.records]
+        info = [r.getMessage() for r in captured.records if r.levelno >= logging.INFO]
+        # Mehrzeilige Eintraege zerfallen in Azure in Zeilen ohne Correlation-ID
+        self.assertEqual([m for m in messages if "\n" in m], [])
+        self.assertIn(
+            "Ticketdaten: Space Server, urgency/impact 2/2 aus Mondoo Risk HIGH", info
+        )
+        self.assertIn(
+            "RITM0100001 angelegt (Status Offen): Mondoo - [CRITICAL] CVE-2024-0056",
+            info,
+        )
+        completed = json.loads(next(m for m in info if "request_completed" in m))
+        self.assertEqual(
+            (completed["method"], completed["path"], completed["status"]),
+            ("POST", "/webhook/mondoo", 200),
+        )
+        # Details nur unter LOG_LEVEL=DEBUG
+        self.assertNotIn("Normalisierter Case", " ".join(info))
+        self.assertTrue(any(m.startswith("Normalisierter Case: {") for m in messages))
 
     async def test_catalog_task_gets_ticket_title_after_assignment(self) -> None:
         backends = FakeBackends(finding_nodes=[CVE_NODE])

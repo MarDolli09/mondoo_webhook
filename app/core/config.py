@@ -28,6 +28,7 @@ BASIC_AUTH_MODE = "basic"
 AUTH_MODES = (OAUTH_AUTH_MODE, BASIC_AUTH_MODE)
 # sys_ids in ServiceNow sind 32-stellig hexadezimal
 SYS_ID_PATTERN = re.compile(r"[0-9a-fA-F]{32}")
+LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
 
 # APP_ENV_FILE erlaubt Tests und Audits, eine Dummy-Datei statt .env zu laden.
 # hide_input_in_errors: Validierungsfehler beim Start duerfen keine Werte (Secrets)
@@ -62,6 +63,9 @@ class Settings(BaseSettings):
     HTTP_TIMEOUT_SECONDS: float = 10.0
     # Wie viele verschiedene Findings eines Case hoechstens abgefragt werden
     MONDOO_MAX_FINDING_LOOKUPS: int = 5
+    # DEBUG ergaenzt Details wie den normalisierten Case und die Header der
+    # ersten Zustellung je Prozess.
+    LOG_LEVEL: str = "INFO"
 
     model_config = SETTINGS_CONFIG
 
@@ -128,6 +132,14 @@ class Settings(BaseSettings):
         cleaned = value.strip().lower()
         if cleaned not in AUTH_MODES:
             raise ValueError(f"SNOW_AUTH_MODE muss {' oder '.join(AUTH_MODES)} sein.")
+        return cleaned
+
+    @field_validator("LOG_LEVEL")
+    @classmethod
+    def _require_known_log_level(cls, value: str) -> str:
+        cleaned = value.strip().upper()
+        if cleaned not in LOG_LEVELS:
+            raise ValueError(f"LOG_LEVEL muss einer von {', '.join(LOG_LEVELS)} sein.")
         return cleaned
 
     @field_validator("SNOW_USER")

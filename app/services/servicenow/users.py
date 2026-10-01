@@ -67,7 +67,7 @@ class UserDirectory:
                 )
                 return None
 
-            logger.info(f"{label} '{value}' aufgeloest und zwischengespeichert.")
+            logger.debug(f"{label} '{value}' aufgeloest und zwischengespeichert.")
             return str(records[0]["sys_id"])
 
         return await self._cache.get_or_resolve((table, query, value), lookup)

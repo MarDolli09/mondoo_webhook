@@ -99,6 +99,29 @@ Importregeln (durch `tests/test_architecture.py` geprüft):
 * Mondoo-Integration: URL `https://<host>/webhook/mondoo` (ohne abschließenden `/`),
   „Sign deliveries“ und „Send an authentication header“ aktiv.
 
+## Logs
+
+Eine Zeile je Schritt, z. B.:
+
+```
+[INFO] [a18f4807] Webhook empfangen (webhook-id 2054dd9f-…)
+[INFO] [a18f4807] Ereignis TYPE_CREATED, vulnerability, 57 Assets: [CRITICAL] Mitigate vulnerability CVE-2026-62818 on multiple assets
+[INFO] [a18f4807] Mondoo-Bewertung CVE-2026-62818 (CveFinding, 70 Assets im Space): CVSS 8.8 (HIGH), Risk 100 (CRITICAL)
+[INFO] [a18f4807] Ticketdaten: Space Server, urgency/impact 1/1 aus Mondoo Risk CRITICAL
+[INFO] [a18f4807] Kein RITM zum Case vorhanden, bestelle neuen Request.
+[INFO] [a18f4807] Service Catalog Request REQ0038907 erzeugt.
+[INFO] [a18f4807] RITM0043072 angelegt (Status Offen): Mondoo - [CRITICAL] CVE-2026-62818
+[INFO] [a18f4807] SCTASK0042543: 'Mondoo Vulnerability - Server' durch Tickettitel ersetzt.
+```
+
+* `[a18f4807]` sind die ersten 8 Zeichen der Correlation-ID; damit findet man
+  alle Zeilen eines Requests. Den Zeitstempel setzt Azure.
+* Je Webhook ein JSON-Datensatz `mondoo_to_servicenow_processed`, je Request
+  `request_completed` (Methode, Pfad, Status, Dauer).
+* `LOG_LEVEL=DEBUG` ergänzt Details (normalisierter Case, Header der ersten
+  Zustellung, aufgelöste Benutzer). `[ERROR]` im Zeilenformat nutzt die
+  Log-Alarmregel in Azure.
+
 ## Konfiguration
 
 Technische Einstellungen: `app/core/config.py`. Fachliche Stammdaten

@@ -19,11 +19,11 @@ __all__ = [
 LOGGER_NAME = "mondoo-receiver"
 MASK = "***MASKED_SECRET***"
 NO_CORRELATION_ID = "-"
-LOG_FORMAT = (
-    "%(asctime)s [%(levelname)s] %(name)s (%(filename)s:%(lineno)d) "
-    "[%(correlation_id)s]: %(message)s"
-)
-DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+# Kein eigener Zeitstempel: Azure stellt jeder Zeile einen voran. "[ERROR]"
+# muss so bleiben, die Log-Alarmregel sucht danach. Von der Correlation-ID
+# genuegen 8 Zeichen, um die Zeilen eines Requests zu finden; vollstaendig
+# steht sie in request_completed und im Telemetriedatensatz.
+LOG_FORMAT = "[%(levelname)s] [%(correlation_id).8s] %(message)s"
 
 _correlation_id: ContextVar[Optional[str]] = ContextVar("correlation_id", default=None)
 
@@ -81,17 +81,13 @@ class CorrelationIdFilter(logging.Filter):
 
 def _setup_logging() -> logging.Logger:
     configured = logging.getLogger(LOGGER_NAME)
-    configured.setLevel(logging.INFO)
+    configured.setLevel(settings.LOG_LEVEL)
 
     if not configured.handlers:
         handler = logging.StreamHandler(sys.stdout)
         handler.addFilter(CorrelationIdFilter())
         handler.setFormatter(
-            SecretMaskingFormatter(
-                fmt=LOG_FORMAT,
-                datefmt=DATE_FORMAT,
-                secrets=settings.secret_values(),
-            )
+            SecretMaskingFormatter(fmt=LOG_FORMAT, secrets=settings.secret_values())
         )
         configured.addHandler(handler)
 

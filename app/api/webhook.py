@@ -28,7 +28,7 @@ async def receive_mondoo_webhook(
 ) -> dict[str, Any]:
 
     received_at = datetime.now(timezone.utc)
-    logger.info(f"=== WEBHOOK EMPFANGEN (webhook-id {delivery.webhook_id}) ===")
+    logger.info(f"Webhook empfangen (webhook-id {delivery.webhook_id})")
     resources.header_sampler.log_once(request)
 
     event = MondooWebhookEvent.from_payload(_decode_json_object(delivery.body))

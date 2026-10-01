@@ -39,8 +39,8 @@ class WebhookProcessor:
         started = time.perf_counter()
         finding_type = self._parser.classify_finding_type(event)
         logger.info(
-            f"Typ '{finding_type}' erkannt, Ereignis '{event.raw_type or '-'}', "
-            f"{event.case.assets_count} Assets. Starte Parsing..."
+            f"Ereignis {event.raw_type or '-'}, {finding_type}, "
+            f"{event.case.assets_count} Assets: {event.case.title}"
         )
         case = await self._parser.parse(event, finding_type)
         parse_ms = _elapsed_ms(started)

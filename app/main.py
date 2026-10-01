@@ -41,8 +41,11 @@ async def correlation_id_middleware(
             json.dumps(
                 {
                     "event": "request_completed",
-                    "correlation_id": correlation_id,
+                    "method": request.method,
+                    "path": mask_secrets(request.url.path, settings.secret_values()),
+                    "status": response.status_code,
                     "duration_ms": duration_ms,
+                    "correlation_id": correlation_id,
                 }
             )
         )

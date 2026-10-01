@@ -18,7 +18,7 @@ from app.domain.identifiers import (
     is_automated_identity,
 )
 from app.domain.ports import FindingScoresLookup
-from app.domain.priority import Priority, determine_priority
+from app.domain.priority import Priority, PrioritySource, determine_priority
 from app.domain.scores import NO_FINDING_SCORES, FindingScores
 from app.models.case import NormalizedCase
 from app.models.mondoo import (
@@ -33,7 +33,10 @@ from app.services.parsing.config import ParsingConfig
 
 __all__ = ["CaseParser"]
 
-LOG_BANNER_WIDTH = 16
+RATING_SOURCE_LABELS = {
+    PrioritySource.MONDOO_RISK: "Mondoo Risk",
+    PrioritySource.CVSS: "CVSS",
+}
 
 
 class CaseParser:
@@ -96,9 +99,7 @@ class CaseParser:
             policies=case.tags.policies,
         )
 
-        _log_normalized_case(
-            normalized, reported_finding_type(finding_type), description
-        )
+        _log_ticket_data(normalized, priority)
         return normalized
 
     async def _resolve_scores(
@@ -142,7 +143,10 @@ class CaseParser:
             self._config.priority_map,
             self._config.default_urgency_impact,
         )
-        _log_priority(priority)
+        if priority.match.kind == "none":
+            logger.warning(
+                "Kein passendes Priority Mapping gefunden. Verwende Default-Werte."
+            )
         return priority
 
 
@@ -208,7 +212,7 @@ def _unique_finding_refs(
             break
 
     if len(refs) > len(unique):
-        logger.info(
+        logger.debug(
             f"{len(refs)} Refs auf {len(unique)} eindeutige Findings reduziert."
         )
     return unique
@@ -229,7 +233,7 @@ def _resolve_mondoo_risk(
     API keinen Wert liefert.
     """
     if scores.risk_rating or scores.risk_score:
-        logger.info(
+        logger.debug(
             f"Mondoo Risk Rating aus der Mondoo-API: "
             f"{scores.risk_rating or '-'} ({scores.risk_score or '-'}/100)"
         )
@@ -251,27 +255,6 @@ def _resolve_mondoo_risk(
     return None, None
 
 
-def _log_priority(priority: Priority) -> None:
-    if priority.match.kind == "rating":
-        logger.info(
-            f"Priority Mapping via Rating ('{priority.match.value}') erfolgreich."
-        )
-    elif priority.match.kind == "title":
-        logger.info(
-            f"Priority Mapping via Titel-Fallback ('{priority.match.value}') "
-            f"erfolgreich."
-        )
-    else:
-        logger.warning(
-            "Kein passendes Priority Mapping gefunden. Verwende Default-Werte."
-        )
-
-    logger.info(
-        f"Priorisierung ueber '{priority.source.value}' -> "
-        f"urgency={priority.urgency}, impact={priority.impact}"
-    )
-
-
 # ---------------------------------------------------------------------- #
 # Ausgabe
 # ---------------------------------------------------------------------- #
@@ -284,12 +267,24 @@ def _ticket_url(description: str, space_id: Optional[str], case_mrn: str) -> str
     return ticket_url
 
 
-def _log_normalized_case(
-    normalized: NormalizedCase, reported_type: str, description: str
-) -> None:
-    rule = "=" * LOG_BANNER_WIDTH
-    label = reported_type.upper()
-    logger.info(f"{rule} [{label}] BEREINIGTER PAYLOAD {rule}")
-    logger.info(normalized.model_dump_json(indent=2))
-    logger.info(f"description: {len(description)} Zeichen (im Log ausgelassen)")
-    logger.info("=" * 71)
+def _log_ticket_data(normalized: NormalizedCase, priority: Priority) -> None:
+    """Eine Zeile mit den abgeleiteten Ticketdaten; alle Felder nur unter DEBUG.
+
+    Mehrzeilige Ausgaben zerfallen in Azure in Zeilen ohne Correlation-ID.
+    """
+    logger.info(
+        f"Ticketdaten: Space {normalized.mondoo_space or '-'}, urgency/impact "
+        f"{normalized.urgency}/{normalized.impact} {_priority_origin(priority)}"
+    )
+    logger.debug(f"Normalisierter Case: {normalized.model_dump_json()}")
+
+
+def _priority_origin(priority: Priority) -> str:
+    """Woher die Prioritaet stammt, z. B. ``aus Mondoo Risk CRITICAL``."""
+    match = priority.match
+    if match.kind == "rating":
+        label = RATING_SOURCE_LABELS.get(priority.source, priority.source.value)
+        return f"aus {label} {match.value}"
+    if match.kind == "title":
+        return f"aus Titel {match.value}"
+    return "(Default)"

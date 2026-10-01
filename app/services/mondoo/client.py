@@ -61,22 +61,28 @@ class MondooGraphQLClient(FindingScoresLookup):
         result = await self._api.fetch_finding_nodes(
             scope_mrn, finding_mrn, NODES_PER_FINDING
         )
+        finding = _short_name(finding_mrn)
         if not result.nodes:
-            logger.info(f"Mondoo kennt {finding_mrn} in {scope_mrn} nicht.")
+            logger.info(f"Mondoo kennt {finding} in {_short_name(scope_mrn)} nicht.")
             return NO_FINDING_SCORES
 
         if result.total_count > len(result.nodes):
             logger.info(
-                f"{finding_mrn} betrifft {result.total_count} Assets, bewertet "
+                f"{finding} betrifft {result.total_count} Assets, bewertet "
                 f"werden die ersten {len(result.nodes)}."
             )
 
         scores = highest_scores(result.nodes)
         logger.info(
-            f"Bewertung fuer {finding_mrn} "
+            f"Mondoo-Bewertung {finding} "
             f"({result.nodes[0].get('__typename', 'Unknown')}, "
-            f"{result.total_count} Assets) -> CVSS "
+            f"{result.total_count} Assets im Space): CVSS "
             f"{scores.cvss_score or '-'} ({scores.cvss_rating or '-'}), "
             f"Risk {scores.risk_score or '-'} ({scores.risk_rating or '-'})"
         )
         return scores
+
+
+def _short_name(mrn: str) -> str:
+    """Letzter Teil einer MRN, z. B. ``CVE-2026-62818``."""
+    return mrn.rstrip("/").rsplit("/", 1)[-1]

@@ -85,6 +85,19 @@ class SettingsStartupTest(unittest.TestCase):
                 self.assertIn(name, result.stderr)
                 self.assertIn(expected_hint, result.stderr)
 
+    def test_unknown_log_level_fails_start(self) -> None:
+        result = start_config(APP_ENV_FILE=TEST_ENV_FILE, LOG_LEVEL="verbose")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("LOG_LEVEL muss einer von DEBUG, INFO", result.stderr)
+
+
+class LogLevelTest(unittest.TestCase):
+    def test_default_is_info_and_case_is_ignored(self) -> None:
+        self.assertEqual(Settings.model_fields["LOG_LEVEL"].default, "INFO")
+        configured = Settings(LOG_LEVEL=" debug ")  # type: ignore[call-arg]
+        self.assertEqual(configured.LOG_LEVEL, "DEBUG")
+
 
 class WebhookSecretNormalizationTest(unittest.TestCase):
     def test_surrounding_whitespace_is_removed(self) -> None:

@@ -23,7 +23,7 @@ SENSITIVE_HEADERS = frozenset(
 
 
 class InboundHeaderSampler:
-    """Protokolliert einmalig die Header eines eingehenden Requests.
+    """Protokolliert einmalig die Header eines eingehenden Requests (DEBUG).
 
     Sensible Header werden ausgelassen, darunter der konfigurierte Auth-Header.
     Eine Instanz lebt im Lifespan.
@@ -45,7 +45,7 @@ class InboundHeaderSampler:
             for key, value in request.headers.items()
             if key.lower() not in self._sensitive
         }
-        logger.info(json.dumps({"event": "inbound_headers_sample", "headers": safe}))
+        logger.debug(json.dumps({"event": "inbound_headers_sample", "headers": safe}))
 
 
 @dataclass(frozen=True)

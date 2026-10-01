@@ -1,12 +1,13 @@
 # Project Context Handover
 
-Stand: 01.10.2026, Commit `23e5d48` plus **Architektur-Refactoring (uncommittet,
-nicht deployt)**, siehe Abschnitt 3 „Refactoring 01.10.“. Laut Test vom 01.10.
-funktionieren Anlegen und Schließen von Tickets (auch automatisch) wie
-erwartet; ob der SCTASK den Tickettitel samt richtiger Assignment Group trägt,
-steht in der Checkliste noch offen. **E-Mail-Alarmierung bei Fehlern ist
-eingerichtet** (Abschnitt 5, „Alarmierung"). Stand vor dem Refactoring
-gesichert im Branch `backup/pre-cleanup-2026-10-01` (`d936cef`).
+Stand: 01.10.2026, Commit `462f566` (Architektur-Refactoring, deployt) plus
+**übersichtlichere Logs (uncommittet, nicht deployt)**, siehe Abschnitt 3
+„Logs 01.10.“. Laut Test vom 01.10. funktionieren Anlegen und Schließen von
+Tickets (auch automatisch) wie erwartet; nach dem Refactoring im Betrieb
+bestätigt: Anlegen samt SCTASK-Titel (RITM0043072). Ob der SCTASK die richtige
+Assignment Group trägt, steht in der Checkliste noch offen. **E-Mail-Alarmierung
+bei Fehlern ist eingerichtet** (Abschnitt 5, „Alarmierung"). Stand vor dem
+Refactoring gesichert im Branch `backup/pre-cleanup-2026-10-01` (`d936cef`).
 
 ## 1. Executive Summary & Project Goal
 
@@ -75,15 +76,35 @@ app/core       Konfiguration, Stammdaten, Logging, Ausnahmen, Signaturprüfung
   von den Ressourcen getrennt (`request_items`, `catalog_tasks`, `catalog`,
   `users`), gebündelt in `ServiceNowAPI`.
 - Fehler nachgelagerter Systeme ergeben immer **502**, nie deren Statuscode.
-- Logs enthalten nie Geheimwerte; die Correlation-ID steht in jeder Zeile.
+- Logs: eine Zeile je Schritt, Format `[LEVEL] [<Correlation-ID, 8 Zeichen>]
+  Meldung`, ohne eigenen Zeitstempel (den setzt Azure). Details nur mit
+  `LOG_LEVEL=DEBUG`. Nie Geheimwerte; die volle Correlation-ID steht in
+  `request_completed` und im Telemetriedatensatz.
 
 ## 3. Active Task & Current State
 
 **Funktionsfähig:** Ende-zu-Ende gegen `bmsptest` mit `SNOW_AUTH_MODE=basic`.
-Tickets werden angelegt, aktualisiert und geschlossen. 61 Tests, ruff und mypy
+Tickets werden angelegt, aktualisiert und geschlossen. 67 Tests, ruff und mypy
 sind grün, auch unter Windows.
 
-**Refactoring 01.10.** (nach dem Architektur-Review, uncommittet, nicht
+**Logs 01.10.** (uncommittet, nicht deployt). Ein Webhook ergibt rund 10 statt
+rund 45 Zeilen im Protokollstream. Format `[INFO] [a18f4807] …` statt
+`2026-10-01 14:45:51 [INFO] mondoo-receiver (webhook.py:31) [<UUID>]: …`. Der
+mehrzeilige „BEREINIGTE PAYLOAD“ (in Azure 28 Zeilen ohne Correlation-ID) und
+die drei Prioritätszeilen sind ersetzt durch eine Zeile
+`Ticketdaten: Space Server, urgency/impact 1/1 aus Mondoo Risk CRITICAL`. Die
+Mondoo-Zeile nennt nur noch die Finding-ID und „Assets im Space“, die
+RITM-Zeile den Tickettitel. Auf DEBUG verschoben: Header-Stichprobe,
+aufgelöste Benutzer, Ref-Reduktion, „gefunden. Starte Update“, Risk-Quelle API,
+normalisierter Case (einzeilig). Neu: Einstellung `LOG_LEVEL` (Default INFO;
+für Details in Azure vorübergehend `DEBUG` setzen, die App startet dann neu),
+`request_completed` mit Methode, Pfad und Status. Unverändert: alle
+WARNING-/ERROR-Texte bis auf die doppelte Vorsilbe („RITM RITM…“,
+„SCTASK SCTASK…“), Telemetriedatensatz, alle Texte der Log-Alarmregel. Golden
+Master: Requests, Antworten und Wartezeiten identisch, 619 → 390 Logzeilen in
+26 Szenarien.
+
+**Refactoring 01.10.** (nach dem Architektur-Review, Commit `462f566`,
 deployt). Umgesetzt: typisiertes Port-Ergebnis `SyncOutcome` (W1),
 Konfiguration nur noch über den Startpunkt injiziert (W2), `ServiceNowAPI` in
 Transport und Ressourcen zerlegt (W3), Antworten ohne JSON ergeben 502 statt
@@ -203,7 +224,7 @@ nicht „Mission-Critical".
 | `app/core/config.py` | Technische Einstellungen samt Startvalidierung |
 | `app/core/master_data.py` | Spaces, Benutzer, Prioritäten, Finding-Typen (per Umgebungsvariable überschreibbar) |
 | `app/core/webhook_signature.py` | Standard-Webhooks-Signatur (HMAC-SHA256) |
-| `app/core/logging.py` | Secret-Maskierung, Correlation-ID |
+| `app/core/logging.py` | Zeilenformat, Secret-Maskierung, Correlation-ID, `LOG_LEVEL` |
 | `app/domain/scores.py` | CVSS- und Risk-Skalen, Ergebnistyp `FindingScores` |
 | `app/domain/ports.py` | Ports `FindingScoresLookup`, `TicketSynchronizer`; Ergebnis `SyncOutcome`/`SyncAction` |
 | `app/domain/priority.py` | Urgency/Impact samt Herkunft (`PrioritySource`) |
@@ -280,11 +301,10 @@ nicht „Mission-Critical".
   Zustellung um 16:59 (Ortszeit) scheiterte noch mit der alten Konfiguration.
   Nach der Korrektur um 17:05 kam das Ticket von 17:06 durch. Bewährte
   Schritte:
-  1. Diagnose: Jeder Request schreibt `request_completed` (ohne Methode,
-     Pfad und Status). Zustellungen an `/webhook/mondoo` zeigen zusätzlich
-     `WEBHOOK EMPFANGEN` oder `Webhook abgewiesen` (Grund in der Zeile). Ein
-     `request_completed` von ~1 ms ohne diese Zeilen bedeutet einen anderen
-     Pfad; `{"status":"online",…}` liefert nur `GET /`. Mondoo zeigt
+  1. Diagnose: Jeder Request schreibt `request_completed` mit Methode, Pfad
+     und Status. Zustellungen an `/webhook/mondoo` zeigen zusätzlich
+     `Webhook empfangen` oder `Webhook abgewiesen` (Grund in der Zeile).
+     `{"status":"online",…}` liefert nur `GET /`. Mondoo zeigt
      Fehlschläge in der Integration unter „Most Recent Activity“
      („webhook delivery failed“), in Ortszeit, Log Analytics dagegen in UTC.
      Bei den Zeiten auf „Last Modified“ der Integration achten.
@@ -292,7 +312,7 @@ nicht „Mission-Critical".
      Space, Case läuft über eine andere Integration, oder die Integration ist
      fehlerhaft. Unter „External Tickets“ zeigt Mondoo „Webhook <UUID>“, nicht
      die RITM-Nummer. Die UUID ist vermutlich die `webhook-id` der
-     Anlage-Zustellung (steht in `WEBHOOK EMPFANGEN (webhook-id …)`); darüber
+     Anlage-Zustellung (steht in `Webhook empfangen (webhook-id …)`); darüber
      findet man im Log Correlation-ID und RITM (noch nicht bestätigt).
   2. `MONDOO_API_KEY` braucht Lesezugriff auf den neuen Space, sonst Ticket
      ohne CVSS/Risk plus ERROR und Alarm.
@@ -527,7 +547,8 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
   blind.
 - Die Spalte `Level` steht bei allen Konsolenzeilen auf „Informational"; gefiltert
   wird deshalb über den Text `[ERROR]` im Log-Format. **Wer das Log-Format in
-  `app/core/logging.py` ändert, muss die Abfrage anpassen.**
+  `app/core/logging.py` ändert, muss die Abfrage anpassen.** `tests/test_logging.py`
+  prüft, dass `[ERROR]` erhalten bleibt.
 - Jede Log-Zeile ist eine eigene Zeile in der Tabelle (Tracebacks also mehrere);
   Startmeldungen erscheinen doppelt, weil Gunicorn zwei Worker startet.
 - Log Analytics erfasst erst ab der Einrichtung und mit einigen Minuten Verzug;
@@ -621,9 +642,8 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
 - [ ] Protokollstream zeigt seit 30.09. „No new trace“, obwohl Log Analytics
       Einträge hat: *App Service-Protokolle* (Anwendungsprotokollierung
       Dateisystem) prüfen.
-- [ ] Optional: `request_completed` um Methode, Pfad (maskiert) und
-      Statuscode ergänzen (`app/main.py`), damit Fehlzustellungen sofort
-      erkennbar sind.
+- [x] `request_completed` um Methode, Pfad (maskiert) und Statuscode ergänzt
+      (01.10., Abschnitt 3 „Logs 01.10.“).
 - [x] `mondoo_title` aus dem Code gestrichen (01.10.).
 - [ ] Feld *Mondoo Title* aus dem Katalogformular entfernen (`bmsptest`, vor
       dem Livegang `bmsp`).
@@ -631,16 +651,19 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
       umgesetzt (01.10., Abschnitt 5, „Short Description des Catalog Task“).
 - [ ] Beim Admin bestätigen lassen: Rechte von `mosca.rest` auf `sc_task`,
       Gruppenzuordnung innerhalb von ~6 s, keine Neuberechnung bei geänderter
-      Short Description. Nach dem Deployment am neuen RITM prüfen: SCTASK hat
-      den Tickettitel **und** die richtige Assignment Group; im Log
-      `SCTASK …: '…' durch Tickettitel ersetzt.`
+      Short Description. Erster Nachweis im Betrieb (01.10.): RITM0043072,
+      `SCTASK0042543: 'Mondoo Vulnerability - Azure' durch Tickettitel
+      ersetzt`. **Auffällig:** Der Case kam aus dem Space *Server*, der
+      Workflow-Text nennt aber *Azure*. Assignment Group dieses SCTASK prüfen
+      und klären, woraus der Workflow den Space liest.
 - [ ] In ServiceNow „Map to field" für die Variablen `urgency` → Urgency und
       `impact` → Impact aktivieren (`bmsptest` und vor dem Livegang `bmsp`).
 - [x] Architektur-Review und Refactoring W1–W8, I1–I7 (01.10., Abschnitt 3
       „Refactoring 01.10.“).
-- [ ] Refactoring committen, deployen und Ende-zu-Ende auf `bmsptest` prüfen:
-      Anlegen, Update, Schließen, Ausnahme, SCTASK-Titel. Im Log müssen die
-      gewohnten Zeilen stehen, neu nur „Priority Mapping via Rating“.
+- [x] Refactoring committet (`462f566`) und deployt; Anlegen samt SCTASK-Titel
+      im Betrieb bestätigt (RITM0043072, 01.10.).
+- [ ] Logs-Änderung committen und deployen, dann im Protokollstream je einmal
+      Anlegen, Update und Schließen ansehen (je rund 10 Zeilen).
 - [ ] I8: Python-Zielversion festlegen (läuft lokal auf dem Mac noch 3.9?)
       und eine CI-Pipeline mit ruff, mypy, Tests und Abdeckung einrichten.
 - [ ] Optional: Backup-Branch pushen
