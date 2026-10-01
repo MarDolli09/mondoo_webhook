@@ -79,7 +79,9 @@ def build_catalog_variables(case: NormalizedCase) -> dict[str, str]:
     "Map to field" nach ``correlation_id`` uebernommen.
     """
     return {
-        "mondoo_title": ticket_title(case),
+        # Versuch 01.10.: ohne mondoo_title bestellen, den Titel setzt nur der
+        # PATCH (short_description). Zum Zuruecknehmen die Zeile wieder aktivieren.
+        # "mondoo_title": ticket_title(case),
         "cve": case.finding_cve,
         "cvss_score": case.cvss_score,
         "cvss_risk_rating": case.cvss_rating,

@@ -277,6 +277,14 @@ nicht „Mission-Critical".
   „Automatically create tickets: disabled“ entsteht dann kein neues Ticket.
   Verbindliche Antwort nur über den Mondoo-Support. Die Middleware reagiert nur
   auf `TYPE_CLOSED`; die Abschlussnotiz nennt Ausnahmen bereits.
+- **Versuch: Bestellung ohne `mondoo_title`** (01.10., läuft). Die Zeile in
+  `build_catalog_variables` ist auskommentiert; den Titel setzt nur noch der
+  PATCH (`short_description`). Tests sind mit „Versuch 01.10.“ markiert. Zu
+  klären: Nimmt `order_now` die Bestellung ohne die Variable an? Hängt etwas
+  im Flow, im Task oder in Benachrichtigungen an `mondoo_title`? Zurücknehmen:
+  die markierten Zeilen wieder aktivieren. Bedenken: Ohne die Variable kann
+  der Flow dem Task keinen Mondoo-Titel geben (er läuft vor dem PATCH), und bei
+  gescheitertem PATCH hat das RITM gar keinen Titel.
 - **Short Description des Catalog Task** („Mondoo Vulnerability - Windows
   Clients") setzt der Flow/Workflow des Katalogelements, nicht die App. Die App
   schreibt nur `sc_req_item` (Short Description = Tickettitel per PATCH
@@ -535,6 +543,9 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
 - [ ] Optional: `request_completed` um Methode, Pfad (maskiert) und
       Statuscode ergänzen (`app/main.py`), damit Fehlzustellungen sofort
       erkennbar sind.
+- [ ] Versuch ohne `mondoo_title` auswerten (Abschnitt 5) und entscheiden:
+      Feld streichen (Formular und Code) oder zurücknehmen und „Map to field"
+      auf Short Description setzen.
 - [ ] In ServiceNow „Map to field" für die Variablen `urgency` → Urgency und
       `impact` → Impact aktivieren (`bmsptest` und vor dem Livegang `bmsp`).
 - [ ] Optional: Getrennte Ressourcengruppen oder ein Deployment-Slot für Test

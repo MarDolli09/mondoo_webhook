@@ -43,13 +43,17 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(list(variables), FORM_VARIABLES)
         self.assertEqual(variables["number_of_affected_assets"], "4")
         self.assertEqual(variables["urgency"], "2")
-        self.assertEqual(
-            variables["mondoo_title"],
-            "Mondoo - [CRITICAL] CVE-2024-0056",
-        )
+        # Versuch 01.10.: mondoo_title wird nicht gesendet, der Titel kommt nur
+        # ueber die short_description im PATCH.
+        # self.assertEqual(
+        #     variables["mondoo_title"],
+        #     "Mondoo - [CRITICAL] CVE-2024-0056",
+        # )
         self.assertEqual(variables["cvss_risk_rating"], "HIGH")
         (patch,) = backends.find("servicenow", "PATCH", "/sc_req_item/")
-        self.assertEqual(patch.body["short_description"], variables["mondoo_title"])
+        self.assertEqual(
+            patch.body["short_description"], "Mondoo - [CRITICAL] CVE-2024-0056"
+        )
         self.assertEqual(patch.body["urgency"], variables["urgency"])
         self.assertEqual(patch.body["impact"], variables["impact"])
         self.assertNotIn("assignment_group", patch.body)
@@ -271,7 +275,9 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("cookie", header_log)
         order_log = next(m for m in captured.output if "order_now abgelehnt" in m)
         self.assertIn('"sysparm_quantity": "1"', order_log)
-        self.assertIn('"mondoo_title": "Mondoo - [CRITICAL] CVE-2024-0056"', order_log)
+        # Versuch 01.10.: mondoo_title wird nicht gesendet; vorher geprueft:
+        # '"mondoo_title": "Mondoo - [CRITICAL] CVE-2024-0056"'
+        self.assertIn('"cve": "CVE-2024-0056"', order_log)
         self.assertIn('"number_of_affected_assets": "4"', order_log)
 
     async def test_no_session_cookies_are_sent_to_servicenow(self) -> None:
