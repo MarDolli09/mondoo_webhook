@@ -72,12 +72,9 @@ app/models     Eingangsmodell (Mondoo) und NormalizedCase
 app/core       Konfiguration, Stammdaten, Logging, Ausnahmen
 ```
 
-Sequenzdiagramm samt Azure-Ressourcen: [docs/sequence-diagram.png](docs/sequence-diagram.png),
-Klassendiagramm: [docs/class-diagram.png](docs/class-diagram.png),
-Domänenmodell: [docs/domain-model.png](docs/domain-model.png),
-Schichtenmodell: [docs/layer-model.png](docs/layer-model.png),
-Prioritätskaskade: [docs/priority-cascade.png](docs/priority-cascade.png)
-(Quellen zum Bearbeiten in draw.io: `docs/*.drawio`).
+Diagramme (Systemkontext, Schichten, Verteilung, Domäne, Klassen, Sequenz,
+Aktivität, Zustände, Prioritätskaskade, Datenabbildung, Sicherheit):
+[docs/DIAGRAMME.md](docs/DIAGRAMME.md), jeweils als PNG und als draw.io-Datei.
 
 Ablauf je Zustellung: `app/api/webhook.py` authentifiziert und dekodiert,
 `WebhookProcessor` (`app/services/processing`) klassifiziert, normalisiert über

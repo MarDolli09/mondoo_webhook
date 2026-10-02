@@ -4,7 +4,8 @@ Stand: 02.10.2026, Commit `dbf30e3` (übersichtlichere Logs, siehe Abschnitt 3
 „Logs 01.10.“; Deployment noch nicht bestätigt) auf dem deployten
 Architektur-Refactoring `462f566`. Sequenzdiagramm samt Azure-Ressourcen
 (`73f3942`), Klassendiagramm (`837f0d2`), Domänenmodell (`ac5dd95`),
-Schichtenmodell (`03a6761`) und Prioritätskaskade (02.10.) unter `docs/`. Laut Test vom 01.10. funktionieren Anlegen und Schließen von
+Schichtenmodell (`03a6761`), Prioritätskaskade (`7eafd14`) und sechs weitere
+Diagramme für die Arbeit (02.10.); Übersicht in `docs/DIAGRAMME.md`. Laut Test vom 01.10. funktionieren Anlegen und Schließen von
 Tickets (auch automatisch) wie erwartet; nach dem Refactoring im Betrieb
 bestätigt: Anlegen samt SCTASK-Titel (RITM0043072). Ob der SCTASK die richtige
 Assignment Group trägt, steht in der Checkliste noch offen. **E-Mail-Alarmierung
@@ -265,6 +266,8 @@ nicht „Mission-Critical".
 | `docs/layer-model.png` | Vorschau des Schichtenmodells; nach Änderungen in draw.io neu exportieren |
 | `docs/priority-cascade.drawio` | Kaskadenmodell der Prioritätsermittlung (Stand 02.10.) im Stil des eigenen Entwurfs: Risk-Herkunft (API, sonst KI-Text), Stufen Mondoo Risk → CVSS → Titel-Tag → Default 3/3, Übernahme in ServiceNow (Update mit Quelle Default lässt Urgency/Impact unverändert) |
 | `docs/priority-cascade.png` | Vorschau der Prioritätskaskade; nach Änderungen in draw.io neu exportieren |
+| `docs/DIAGRAMME.md` | Abbildungsverzeichnis aller 11 Diagramme mit Titel, Inhalt und passendem Kapitel der Arbeit |
+| `docs/system-context.*`, `deployment.*`, `ticket-states.*`, `activity-errors.*`, `data-mapping.*`, `security.*` | Weitere Diagramme für die Arbeit (02.10.): Systemkontext, UML-Verteilung, Ticket-Zustände, Aktivität mit Fehlerbehandlung, Datenabbildung, Sicherheitsarchitektur |
 
 ## 5. Open Issues, Edge Cases & Constraints
 
