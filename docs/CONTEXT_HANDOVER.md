@@ -3,7 +3,8 @@
 Stand: 02.10.2026, Commit `dbf30e3` (übersichtlichere Logs, siehe Abschnitt 3
 „Logs 01.10.“; Deployment noch nicht bestätigt) auf dem deployten
 Architektur-Refactoring `462f566`. Sequenzdiagramm samt Azure-Ressourcen
-(`73f3942`) und Klassendiagramm neu (02.10., `docs/*-diagram.*`). Laut Test vom 01.10. funktionieren Anlegen und Schließen von
+(`73f3942`), Klassendiagramm (`837f0d2`) und Domänenmodell (02.10.) unter
+`docs/`. Laut Test vom 01.10. funktionieren Anlegen und Schließen von
 Tickets (auch automatisch) wie erwartet; nach dem Refactoring im Betrieb
 bestätigt: Anlegen samt SCTASK-Titel (RITM0043072). Ob der SCTASK die richtige
 Assignment Group trägt, steht in der Checkliste noch offen. **E-Mail-Alarmierung
@@ -258,6 +259,8 @@ nicht „Mission-Critical".
 | `docs/sequence-diagram.png` | Vorschau des Sequenzdiagramms; nach Änderungen in draw.io neu exportieren |
 | `docs/class-diagram.drawio` | Klassendiagramm (Stand 02.10., 51 Klassen) nach Paketen api, services, domain, models, core; Ports blau; Kanten an den Klassen verankert, editierbar in draw.io |
 | `docs/class-diagram.png` | Vorschau des Klassendiagramms; nach Änderungen am Code oder in draw.io neu exportieren |
+| `docs/domain-model.drawio` | Domänenmodell (Stand 02.10., 25 Begriffe): Bereiche Mondoo, Middleware, ServiceNow; Assoziationen mit Leserichtung und Multiplizitäten, Geschäftsregeln als Notizen; Kernaussage Case 1 : 0..1 RITM über `correlation_id` |
+| `docs/domain-model.png` | Vorschau des Domänenmodells; nach Änderungen in draw.io neu exportieren |
 
 ## 5. Open Issues, Edge Cases & Constraints
 

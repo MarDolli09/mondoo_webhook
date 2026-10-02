@@ -73,7 +73,8 @@ app/core       Konfiguration, Stammdaten, Logging, Ausnahmen
 ```
 
 Sequenzdiagramm samt Azure-Ressourcen: [docs/sequence-diagram.png](docs/sequence-diagram.png),
-Klassendiagramm: [docs/class-diagram.png](docs/class-diagram.png)
+Klassendiagramm: [docs/class-diagram.png](docs/class-diagram.png),
+Domänenmodell: [docs/domain-model.png](docs/domain-model.png)
 (Quellen zum Bearbeiten in draw.io: `docs/*.drawio`).
 
 Ablauf je Zustellung: `app/api/webhook.py` authentifiziert und dekodiert,
