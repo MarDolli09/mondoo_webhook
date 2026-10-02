@@ -1,8 +1,9 @@
 # Project Context Handover
 
-Stand: 01.10.2026, Commit `462f566` (Architektur-Refactoring, deployt) plus
-**übersichtlichere Logs (uncommittet, nicht deployt)**, siehe Abschnitt 3
-„Logs 01.10.“. Laut Test vom 01.10. funktionieren Anlegen und Schließen von
+Stand: 02.10.2026, Commit `dbf30e3` (übersichtlichere Logs, siehe Abschnitt 3
+„Logs 01.10.“; Deployment noch nicht bestätigt) auf dem deployten
+Architektur-Refactoring `462f566`. Sequenzdiagramm samt Azure-Ressourcen neu
+(02.10., `docs/sequence-diagram.*`). Laut Test vom 01.10. funktionieren Anlegen und Schließen von
 Tickets (auch automatisch) wie erwartet; nach dem Refactoring im Betrieb
 bestätigt: Anlegen samt SCTASK-Titel (RITM0043072). Ob der SCTASK die richtige
 Assignment Group trägt, steht in der Checkliste noch offen. **E-Mail-Alarmierung
@@ -87,7 +88,7 @@ app/core       Konfiguration, Stammdaten, Logging, Ausnahmen, Signaturprüfung
 Tickets werden angelegt, aktualisiert und geschlossen. 67 Tests, ruff und mypy
 sind grün, auch unter Windows.
 
-**Logs 01.10.** (uncommittet, nicht deployt). Ein Webhook ergibt rund 10 statt
+**Logs 01.10.** (Commit `dbf30e3`). Ein Webhook ergibt rund 10 statt
 rund 45 Zeilen im Protokollstream. Format `[INFO] [a18f4807] …` statt
 `2026-10-01 14:45:51 [INFO] mondoo-receiver (webhook.py:31) [<UUID>]: …`. Der
 mehrzeilige „BEREINIGTE PAYLOAD“ (in Azure 28 Zeilen ohne Correlation-ID) und
@@ -253,7 +254,7 @@ nicht „Mission-Critical".
 | `scripts/verify_scores.py` | Führt die Produktionsabfrage gegen die echte API aus; optional `<findingMrn> [scope …]`, misst die Dauer |
 | `scripts/introspect_next.py` | Introspektion für die offenen GraphQL-Kandidaten |
 | `README.md` | Ablauf, Mapping-Tabelle, Betrieb in Azure |
-| `docs/sequence-diagram.drawio` | Sequenzdiagramm des Ablaufs (App-Start, Webhook, Mondoo-API, ServiceNow, Alarmierung), editierbar in draw.io |
+| `docs/sequence-diagram.drawio` | Sequenzdiagramm (Stand 02.10.) mit allen Azure-Ressourcen der Ressourcengruppe als Lebenslinien bzw. im Kopf (App Service samt Plan, Key Vault, Log Analytics, Warnungsregeln, Aktionsgruppe): App-Start, Zustellung, Bewertung, RITM und SCTASK, Alarmierung; editierbar in draw.io |
 | `docs/sequence-diagram.png` | Vorschau des Sequenzdiagramms; nach Änderungen in draw.io neu exportieren |
 
 ## 5. Open Issues, Edge Cases & Constraints
@@ -662,7 +663,7 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
       „Refactoring 01.10.“).
 - [x] Refactoring committet (`462f566`) und deployt; Anlegen samt SCTASK-Titel
       im Betrieb bestätigt (RITM0043072, 01.10.).
-- [ ] Logs-Änderung committen und deployen, dann im Protokollstream je einmal
+- [ ] Logs-Änderung (`dbf30e3`) deployen, dann im Protokollstream je einmal
       Anlegen, Update und Schließen ansehen (je rund 10 Zeilen).
 - [ ] I8: Python-Zielversion festlegen (läuft lokal auf dem Mac noch 3.9?)
       und eine CI-Pipeline mit ruff, mypy, Tests und Abdeckung einrichten.
