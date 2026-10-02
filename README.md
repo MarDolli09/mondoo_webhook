@@ -72,8 +72,9 @@ app/models     Eingangsmodell (Mondoo) und NormalizedCase
 app/core       Konfiguration, Stammdaten, Logging, Ausnahmen
 ```
 
-Sequenzdiagramm samt Azure-Ressourcen: [docs/sequence-diagram.png](docs/sequence-diagram.png)
-(Quelle zum Bearbeiten in draw.io: `docs/sequence-diagram.drawio`).
+Sequenzdiagramm samt Azure-Ressourcen: [docs/sequence-diagram.png](docs/sequence-diagram.png),
+Klassendiagramm: [docs/class-diagram.png](docs/class-diagram.png)
+(Quellen zum Bearbeiten in draw.io: `docs/*.drawio`).
 
 Ablauf je Zustellung: `app/api/webhook.py` authentifiziert und dekodiert,
 `WebhookProcessor` (`app/services/processing`) klassifiziert, normalisiert über
