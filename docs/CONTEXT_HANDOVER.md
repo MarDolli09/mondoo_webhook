@@ -5,8 +5,9 @@ Stand: 02.10.2026, Commit `dbf30e3` (übersichtlichere Logs, siehe Abschnitt 3
 Architektur-Refactoring `462f566`. Sequenzdiagramm samt Azure-Ressourcen
 (`73f3942`), Klassendiagramm (`837f0d2`), Domänenmodell (`ac5dd95`),
 Schichtenmodell (`03a6761`), Prioritätskaskade (`7eafd14`), sechs weitere
-Diagramme für die Arbeit (`befe63a`) und der BPMN-Soll-Prozess mit zwei SCTASKs
-(05.10.); Übersicht in `docs/DIAGRAMME.md`. Laut Test vom 01.10. funktionieren Anlegen und Schließen von
+Diagramme für die Arbeit (`befe63a`), der BPMN-Soll-Prozess mit zwei SCTASKs
+und der frühere Ist-Prozess als BPMN (beide 05.10.); Übersicht in
+`docs/DIAGRAMME.md`. Laut Test vom 01.10. funktionieren Anlegen und Schließen von
 Tickets (auch automatisch) wie erwartet; nach dem Refactoring im Betrieb
 bestätigt: Anlegen samt SCTASK-Titel (RITM0043072). Ob der SCTASK die richtige
 Assignment Group trägt, steht in der Checkliste noch offen. **E-Mail-Alarmierung
@@ -267,9 +268,11 @@ nicht „Mission-Critical".
 | `docs/layer-model.png` | Vorschau des Schichtenmodells; nach Änderungen in draw.io neu exportieren |
 | `docs/priority-cascade.drawio` | Kaskadenmodell der Prioritätsermittlung (Stand 02.10.) im Stil des eigenen Entwurfs: Risk-Herkunft (API, sonst KI-Text), Stufen Mondoo Risk → CVSS → Titel-Tag → Default 3/3, Übernahme in ServiceNow (Update mit Quelle Default lässt Urgency/Impact unverändert) |
 | `docs/priority-cascade.png` | Vorschau der Prioritätskaskade; nach Änderungen in draw.io neu exportieren |
-| `docs/DIAGRAMME.md` | Abbildungsverzeichnis aller 12 Diagramme mit Titel, Inhalt und passendem Kapitel der Arbeit |
+| `docs/DIAGRAMME.md` | Abbildungsverzeichnis aller 13 Diagramme mit Titel, Inhalt und passendem Kapitel der Arbeit |
 | `docs/bpmn-process.drawio` | BPMN-2.0-Soll-Prozess (05.10., zweite Fassung nach Entwurf des Nutzers): Bahnen IT-Sicherheit, ServiceNow, System-Owner, Middleware bewusst ausgeblendet; Behebungs-SCTASK, Prüf-SCTASK („Closed Complete“ schließt das RITM, „Closed Incomplete“ legt einen Nacharbeits-SCTASK an), Ausnahmen (voll über Behebungs- und Prüf-SCTASK, teilweise und abgelehnt zurück in die Behebung), Eskalation; Formen der draw.io-BPMN-Palette |
 | `docs/bpmn-process.png` | Vorschau des BPMN-Prozesses; nach Änderungen in draw.io neu exportieren |
+| `docs/bpmn-as-is-process.drawio` | BPMN-2.0-Ist-Prozess vor der Integration (05.10., Nachbau des Entwurfs des Nutzers): Mondoo als zugeklappter Pool mit Nachrichtenflüssen, Bahnen IT-Sicherheit und Software-Owner/Admin; Report sichten, Kritikalität bewerten, Meldung per E-Mail/Teams, Behebung, Rückmeldung, Schließen; Notiz zum ungenutzten ServiceNow-Formular |
+| `docs/bpmn-as-is-process.png` | Vorschau des Ist-Prozesses; nach Änderungen in draw.io neu exportieren |
 | `docs/system-context.*`, `deployment.*`, `ticket-states.*`, `activity-errors.*`, `data-mapping.*`, `security.*` | Weitere Diagramme für die Arbeit (02.10.): Systemkontext, UML-Verteilung, Ticket-Zustände, Aktivität mit Fehlerbehandlung, Datenabbildung, Sicherheitsarchitektur |
 
 ## 5. Open Issues, Edge Cases & Constraints

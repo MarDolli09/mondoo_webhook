@@ -1,7 +1,7 @@
 # Diagramme
 
 Alle Diagramme liegen unter `docs/` als bearbeitbare draw.io-Datei (`.drawio`)
-und als PNG. Stand 02.10.2026, Code-Stand `dbf30e3`. Nach Änderungen am Code
+und als PNG. Stand 05.10.2026, Code-Stand `dbf30e3`. Nach Änderungen am Code
 die betroffenen Diagramme prüfen und das PNG aus draw.io neu exportieren.
 Quellenangabe in der Arbeit: eigene Darstellung.
 
@@ -19,14 +19,18 @@ Quellenangabe in der Arbeit: eigene Darstellung.
 | 10 | Datenabbildung | `data-mapping` | Felder von Mondoo über den normalisierten Case nach ServiceNow | Datenmodell, Integration |
 | 11 | Sicherheitsarchitektur | `security` | Vertrauensgrenzen und Schutzmaßnahmen je Datenfluss | Sicherheit |
 | 12 | Prozess der Schwachstellenbehebung | `bpmn-process` | Soll-Prozess mit Mondoo und ServiceNow: Behebungs-, Prüf- und Nacharbeits-SCTASK, Ausnahmen und Eskalation | Prozess, Soll-Konzept |
+| 13 | Früherer Ist-Prozess der Schwachstellenbehandlung | `bpmn-as-is-process` | Ablauf vor der Integration: Report aus Mondoo, Sichtung, Meldung per E-Mail/Teams, Behebung und Rückmeldung; ServiceNow bleibt ungenutzt | Ist-Analyse |
 
 Notation:
 
-- **BPMN 2.0:** Prozess der Schwachstellenbehebung; ein Pool mit den Bahnen
+- **BPMN 2.0, Soll-Prozess** (`bpmn-process`): ein Pool mit den Bahnen
   IT-Sicherheit, ServiceNow und System-Owner. Benutzer-Tasks mit
   Personensymbol, automatische Schritte in ServiceNow mit Zahnrad;
   Link-Ereignisse („Behebung erneut“, „Nacharbeit“, „Ausnahme genehmigt“)
   ersetzen lange Rücksprünge. Die Middleware ist bewusst nicht dargestellt.
+- **BPMN 2.0, Ist-Prozess** (`bpmn-as-is-process`): Mondoo als zugeklappter
+  Pool, verbunden über Nachrichtenflüsse (gestrichelt); Sende-Tasks mit
+  Briefsymbol für die Meldungen per E-Mail/Teams.
 - **UML:** Verteilungs-, Klassen-, Sequenz-, Aktivitäts- und
   Zustandsdiagramm sowie das Domänenmodell.
 - **Systemkontext:** angelehnt an C4, Ebene 1.
