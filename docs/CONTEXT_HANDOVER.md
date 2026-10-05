@@ -4,8 +4,9 @@ Stand: 02.10.2026, Commit `dbf30e3` (übersichtlichere Logs, siehe Abschnitt 3
 „Logs 01.10.“; Deployment noch nicht bestätigt) auf dem deployten
 Architektur-Refactoring `462f566`. Sequenzdiagramm samt Azure-Ressourcen
 (`73f3942`), Klassendiagramm (`837f0d2`), Domänenmodell (`ac5dd95`),
-Schichtenmodell (`03a6761`), Prioritätskaskade (`7eafd14`) und sechs weitere
-Diagramme für die Arbeit (02.10.); Übersicht in `docs/DIAGRAMME.md`. Laut Test vom 01.10. funktionieren Anlegen und Schließen von
+Schichtenmodell (`03a6761`), Prioritätskaskade (`7eafd14`), sechs weitere
+Diagramme für die Arbeit (`befe63a`) und der BPMN-Soll-Prozess mit zwei SCTASKs
+(05.10.); Übersicht in `docs/DIAGRAMME.md`. Laut Test vom 01.10. funktionieren Anlegen und Schließen von
 Tickets (auch automatisch) wie erwartet; nach dem Refactoring im Betrieb
 bestätigt: Anlegen samt SCTASK-Titel (RITM0043072). Ob der SCTASK die richtige
 Assignment Group trägt, steht in der Checkliste noch offen. **E-Mail-Alarmierung
@@ -266,7 +267,9 @@ nicht „Mission-Critical".
 | `docs/layer-model.png` | Vorschau des Schichtenmodells; nach Änderungen in draw.io neu exportieren |
 | `docs/priority-cascade.drawio` | Kaskadenmodell der Prioritätsermittlung (Stand 02.10.) im Stil des eigenen Entwurfs: Risk-Herkunft (API, sonst KI-Text), Stufen Mondoo Risk → CVSS → Titel-Tag → Default 3/3, Übernahme in ServiceNow (Update mit Quelle Default lässt Urgency/Impact unverändert) |
 | `docs/priority-cascade.png` | Vorschau der Prioritätskaskade; nach Änderungen in draw.io neu exportieren |
-| `docs/DIAGRAMME.md` | Abbildungsverzeichnis aller 11 Diagramme mit Titel, Inhalt und passendem Kapitel der Arbeit |
+| `docs/DIAGRAMME.md` | Abbildungsverzeichnis aller 12 Diagramme mit Titel, Inhalt und passendem Kapitel der Arbeit |
+| `docs/bpmn-process.drawio` | BPMN-2.0-Soll-Prozess (05.10.): Bahnen IT-Sicherheit, Systeme, System-Owner; SCTASK 1 (Behebung) und SCTASK 2 (Prüfung), Ausnahmen, Eskalation, Abschluss durch Mondoo und Middleware, Ereignis-Teilprozesse für „geändert“ und „gelöscht“; Formen der draw.io-BPMN-Palette |
+| `docs/bpmn-process.png` | Vorschau des BPMN-Prozesses; nach Änderungen in draw.io neu exportieren |
 | `docs/system-context.*`, `deployment.*`, `ticket-states.*`, `activity-errors.*`, `data-mapping.*`, `security.*` | Weitere Diagramme für die Arbeit (02.10.): Systemkontext, UML-Verteilung, Ticket-Zustände, Aktivität mit Fehlerbehandlung, Datenabbildung, Sicherheitsarchitektur |
 
 ## 5. Open Issues, Edge Cases & Constraints
@@ -389,6 +392,20 @@ nicht „Mission-Critical".
   Description, dann nutzt der Flow den Titel; (C) die App ändert `sc_task`
   selbst, nicht empfohlen (Task existiert evtl. noch nicht, Schreibrecht
   nötig, Flow kann überschreiben).
+- **Zweistufige SCTASKs (Soll-Prozess, 05.10.):** Bearbeitet wird der
+  SCTASK, nicht das RITM. Schließt der System-Owner/Admin seinen SCTASK, legt
+  der Workflow automatisch einen zweiten SCTASK für die IT-Sicherheit an
+  („Behebung abgeschlossen, bereit zur Prüfung“). Erst wenn dieser zweite Task
+  geschlossen ist, schließt sich das RITM bzw. darf die IT-Sicherheit das
+  Ticket in Mondoo schließen. Voraussetzung ist, dass Mondoo die Behebung
+  sieht (z. B. 0/1 → 1/1 fixed); dann schließt Mondoo das Ticket zum nächsten
+  Scan auch selbst und löst `TYPE_CLOSED` aus. **Konflikt mit der App:**
+  `build_update_fields` setzt bei `TYPE_CLOSED` das RITM auf 3 (bei
+  `TYPE_DELETED` auf 7), unabhängig von offenen SCTASKs. Schließt Mondoo das
+  Ticket, bevor der Prüf-SCTASK erledigt ist, umgeht die App die Prüfung.
+  Entscheidung offen: bei offenen SCTASKs nur Arbeitsnotiz statt Abschluss,
+  oder das Schließen ganz dem Workflow überlassen. Den zweiten SCTASK fasst
+  die App nicht an (sie sucht nur direkt nach der Anlage).
 - **`mondoo_mrn` ohne „Map to field"**: Die `correlation_id` setzt erst der PATCH
   nach der Bestellung. Schlägt der fehl, entsteht beim nächsten Ereignis ein
   zweites Ticket.
@@ -652,6 +669,14 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
       geschlossen, rund 11 min nach Freigabe der Ausnahme (30.09.).
 - [ ] Prozess festlegen (Termin Vorgesetzter): Umgang mit abgelaufenen
       Ausnahmen (Finding zählt wieder, aber kein automatisches neues Ticket).
+- [ ] Zweistufige SCTASKs (Abschnitt 5): entscheiden, ob die App bei
+      `TYPE_CLOSED`/`TYPE_DELETED` das RITM trotz offener SCTASKs schließen
+      darf; mit dem ServiceNow-Admin klären, wie ein nicht bestandener
+      Prüf-SCTASK zum Admin zurückgeht.
+- [x] BPMN-Prozess an den Ist-Stand angepasst (05.10., `docs/bpmn-process.*`):
+      SCTASKs, automatische Schritte, Abschluss durch Mondoo. Bei einer
+      Entscheidung zum RITM-Abschluss (Punkt oben) das Gateway „RITM bereits
+      geschlossen?“ im Diagramm nachziehen.
 - [ ] Protokollstream zeigt seit 30.09. „No new trace“, obwohl Log Analytics
       Einträge hat: *App Service-Protokolle* (Anwendungsprotokollierung
       Dateisystem) prüfen.

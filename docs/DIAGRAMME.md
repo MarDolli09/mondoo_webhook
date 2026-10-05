@@ -18,9 +18,14 @@ Quellenangabe in der Arbeit: eigene Darstellung.
 | 9 | Prioritätskaskade | `priority-cascade` | Stufen von Mondoo Risk über CVSS und Titel-Tag bis Default | Fachlogik |
 | 10 | Datenabbildung | `data-mapping` | Felder von Mondoo über den normalisierten Case nach ServiceNow | Datenmodell, Integration |
 | 11 | Sicherheitsarchitektur | `security` | Vertrauensgrenzen und Schutzmaßnahmen je Datenfluss | Sicherheit |
+| 12 | Prozess der Schwachstellenbehebung | `bpmn-process` | Soll-Prozess mit Rollen, SCTASK 1 (Behebung) und SCTASK 2 (Prüfung), automatischen Schritten, Ausnahmen und Eskalation | Prozess, Soll-Konzept |
 
 Notation:
 
+- **BPMN 2.0:** Prozess der Schwachstellenbehebung; ein Pool mit den Bahnen
+  IT-Sicherheit, Systeme und System-Owner. Benutzer-Tasks gelb, Service-Tasks
+  (automatisch) hellblau, Link-Ereignisse „Behebung erneut“ ersetzen lange
+  Rücksprünge.
 - **UML:** Verteilungs-, Klassen-, Sequenz-, Aktivitäts- und
   Zustandsdiagramm sowie das Domänenmodell.
 - **Systemkontext:** angelehnt an C4, Ebene 1.
