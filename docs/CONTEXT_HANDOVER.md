@@ -268,7 +268,7 @@ nicht „Mission-Critical".
 | `docs/priority-cascade.drawio` | Kaskadenmodell der Prioritätsermittlung (Stand 02.10.) im Stil des eigenen Entwurfs: Risk-Herkunft (API, sonst KI-Text), Stufen Mondoo Risk → CVSS → Titel-Tag → Default 3/3, Übernahme in ServiceNow (Update mit Quelle Default lässt Urgency/Impact unverändert) |
 | `docs/priority-cascade.png` | Vorschau der Prioritätskaskade; nach Änderungen in draw.io neu exportieren |
 | `docs/DIAGRAMME.md` | Abbildungsverzeichnis aller 12 Diagramme mit Titel, Inhalt und passendem Kapitel der Arbeit |
-| `docs/bpmn-process.drawio` | BPMN-2.0-Soll-Prozess (05.10.): Bahnen IT-Sicherheit, Systeme, System-Owner; SCTASK 1 (Behebung) und SCTASK 2 (Prüfung), Ausnahmen, Eskalation, Abschluss durch Mondoo und Middleware, Ereignis-Teilprozesse für „geändert“ und „gelöscht“; Formen der draw.io-BPMN-Palette |
+| `docs/bpmn-process.drawio` | BPMN-2.0-Soll-Prozess (05.10., zweite Fassung nach Entwurf des Nutzers): Bahnen IT-Sicherheit, ServiceNow, System-Owner, Middleware bewusst ausgeblendet; Behebungs-SCTASK, Prüf-SCTASK („Closed Complete“ schließt das RITM, „Closed Incomplete“ legt einen Nacharbeits-SCTASK an), Ausnahmen (voll über Behebungs- und Prüf-SCTASK, teilweise und abgelehnt zurück in die Behebung), Eskalation; Formen der draw.io-BPMN-Palette |
 | `docs/bpmn-process.png` | Vorschau des BPMN-Prozesses; nach Änderungen in draw.io neu exportieren |
 | `docs/system-context.*`, `deployment.*`, `ticket-states.*`, `activity-errors.*`, `data-mapping.*`, `security.*` | Weitere Diagramme für die Arbeit (02.10.): Systemkontext, UML-Verteilung, Ticket-Zustände, Aktivität mit Fehlerbehandlung, Datenabbildung, Sicherheitsarchitektur |
 
@@ -405,7 +405,12 @@ nicht „Mission-Critical".
   Ticket, bevor der Prüf-SCTASK erledigt ist, umgeht die App die Prüfung.
   Entscheidung offen: bei offenen SCTASKs nur Arbeitsnotiz statt Abschluss,
   oder das Schließen ganz dem Workflow überlassen. Den zweiten SCTASK fasst
-  die App nicht an (sie sucht nur direkt nach der Anlage).
+  die App nicht an (sie sucht nur direkt nach der Anlage). Festgelegt im
+  BPMN-Prozess (05.10.): Die IT-Sicherheit setzt einen nicht bestandenen
+  Prüf-SCTASK auf „Closed Incomplete“, der Workflow legt dann einen
+  Nacharbeits-SCTASK für den Admin an; nur „Closed Complete“ schließt das
+  RITM. Bei einer vollständig genehmigten Ausnahme schließt der Admin seinen
+  SCTASK, danach läuft die normale Prüfung.
 - **`mondoo_mrn` ohne „Map to field"**: Die `correlation_id` setzt erst der PATCH
   nach der Bestellung. Schlägt der fehl, entsteht beim nächsten Ereignis ein
   zweites Ticket.
@@ -671,8 +676,9 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
       Ausnahmen (Finding zählt wieder, aber kein automatisches neues Ticket).
 - [ ] Zweistufige SCTASKs (Abschnitt 5): entscheiden, ob die App bei
       `TYPE_CLOSED`/`TYPE_DELETED` das RITM trotz offener SCTASKs schließen
-      darf; mit dem ServiceNow-Admin klären, wie ein nicht bestandener
-      Prüf-SCTASK zum Admin zurückgeht.
+      darf; im Workflow umsetzen lassen: „Closed Incomplete“ am Prüf-SCTASK
+      legt einen Nacharbeits-SCTASK an, nur „Closed Complete“ schließt das
+      RITM (siehe BPMN-Prozess).
 - [x] BPMN-Prozess an den Ist-Stand angepasst (05.10., `docs/bpmn-process.*`):
       SCTASKs, automatische Schritte, Abschluss durch Mondoo. Bei einer
       Entscheidung zum RITM-Abschluss (Punkt oben) das Gateway „RITM bereits
