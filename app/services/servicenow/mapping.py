@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from app.core.logging import logger
 from app.domain.case_text import strip_asset_suffix, strip_mitigate_phrase
+from app.domain.identifiers import extract_space_id
 from app.domain.priority import PrioritySource
 from app.models.case import NormalizedCase
 from app.models.mondoo import MondooEventType
@@ -27,6 +28,7 @@ __all__ = [
     "build_update_fields",
     "correlation_id",
     "creator_display_name",
+    "space_choice",
     "ticket_title",
     "watcher_identifiers",
 ]
@@ -79,8 +81,28 @@ def creator_display_name(case: NormalizedCase, user_names: Mapping[str, str]) ->
     return user_names.get(creator_mrn, creator_mrn)
 
 
+def space_choice(case: NormalizedCase, space_choices: Mapping[str, str]) -> str:
+    """Auswahlwert der Variable ``mondoo_space``, z. B. ``space_server``.
+
+    ``space_choices`` ordnet Mondoo-Space-IDs den Auswahlwerten des Formulars
+    zu. Fehlt der Space, geht der Anzeigename an ServiceNow; der Workflow
+    ordnet ihn dann keiner Gruppe zu, deshalb ERROR und Alarm.
+    """
+    space_id = extract_space_id(case.owner_mrn) or ""
+    choice = space_choices.get(space_id)
+    if choice:
+        return choice
+    logger.error(
+        f"Kein Auswahlwert fuer Space '{case.mondoo_space or space_id}' in "
+        f"SPACE_CHOICE_MAP. Der Workflow kann den SCTASK keiner Gruppe zuordnen."
+    )
+    return case.mondoo_space
+
+
 def build_catalog_variables(
-    case: NormalizedCase, user_names: Mapping[str, str]
+    case: NormalizedCase,
+    user_names: Mapping[str, str],
+    space_choices: Mapping[str, str],
 ) -> dict[str, str]:
     """Variablen des Katalogformulars "Mondoo Vulnerability" fuer ``order_now``.
 
@@ -93,7 +115,7 @@ def build_catalog_variables(
         "cvss_risk_rating": case.cvss_rating,
         "mondoo_risk_rating": case.risk_rating,
         "mondoo_risk_score": case.risk_score,
-        "mondoo_space": case.mondoo_space,
+        "mondoo_space": space_choice(case, space_choices),
         "finding_type": case.finding_type,
         "mondoo_ticket_url": case.ticket_url,
         "number_of_affected_assets": str(case.assets_count),

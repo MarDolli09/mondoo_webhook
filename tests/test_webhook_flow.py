@@ -46,6 +46,8 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(variables["number_of_affected_assets"], "4")
         self.assertEqual(variables["urgency"], "2")
         self.assertEqual(variables["cvss_risk_rating"], "HIGH")
+        # Space "Server" der Fixture als Auswahlwert des Formulars
+        self.assertEqual(variables["mondoo_space"], "space_server")
         (patch,) = backends.find("servicenow", "PATCH", "/sc_req_item/")
         self.assertEqual(
             patch.body["short_description"], "Mondoo - [CRITICAL] CVE-2024-0056"

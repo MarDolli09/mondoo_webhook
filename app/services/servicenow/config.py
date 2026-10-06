@@ -29,3 +29,5 @@ class ServiceNowConfig:
     user_lookup_fields: tuple[str, ...] = ("user_name", "email", "name")
     # Mondoo-Benutzer-MRN -> Name des Benutzers in ServiceNow
     user_names: Mapping[str, str] = field(default_factory=dict)
+    # Mondoo-Space-ID -> Auswahlwert der Katalogvariable mondoo_space
+    space_choices: Mapping[str, str] = field(default_factory=dict)

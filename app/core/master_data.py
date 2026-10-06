@@ -32,6 +32,21 @@ class MasterData(BaseSettings):
         "eu-sweet-sanderson-152264": "Windows-Clients",
     }
 
+    # Mondoo-Space-ID -> Wert der Auswahl "Mondoo Space" im Katalogformular
+    # (Variable mondoo_space). Daraus bestimmt der Workflow die Assignment Group;
+    # ein unbekannter Wert landet dort bei der ersten Auswahl (Azure).
+    SPACE_CHOICE_MAP: dict[str, str] = {
+        "eu-elastic-hodgkin-413342": "space_azure",
+        "eu-peaceful-elgamal-693498": "space_microsoft_defender_for_cloud",
+        "eu-loving-lichterman-592949": "space_domain",
+        "eu-crazy-driscoll-397797": "space_ip_address",
+        "eu-hungry-maxwell-418237": "space_grafana",
+        "eu-vigorous-mcnulty-229373": "space_m365",
+        "eu-nifty-mendeleev-113214": "space_server",
+        "eu-great-goldwasser-976351": "space_vmware",
+        "eu-sweet-sanderson-152264": "space_windows_clients",
+    }
+
     # Mondoo-Benutzer-MRN -> Name des Benutzers in ServiceNow
     USER_MAP: dict[str, str] = {
         f"{_MONDOO_USER_MRN}3CnXrWtrHy64L3xt2SCzgJKX0OM": "Marius Dollinger",

@@ -42,7 +42,7 @@ Katalogformular „Mondoo Vulnerability“ (`order_now`), Reihenfolge wie im For
 | CVSS Score / CVSS Risk Rating | `cvss_score` / `cvss_risk_rating` | aus `cvss.value`/`cvss.rating` des Findings; die API liefert 0–100 (98 = 9.8), 0 bedeutet kein CVSS |
 | Mondoo Risk Rating / Score | `mondoo_risk_rating` / `mondoo_risk_score` | aus `riskValue`/`rating` des Findings (Skala 0–100), nur ohne API-Wert aus der AI-Summary |
 | Urgency / Impact | `urgency` / `impact` | `1` (Critical) bis `4` (Low), aus Mondoo Risk Rating, sonst CVSS-Rating, sonst Titel |
-| Mondoo Space | `mondoo_space` | Anzeigename laut `CATEGORY_MAP` |
+| Mondoo Space | `mondoo_space` | Auswahlwert laut `SPACE_CHOICE_MAP`, z. B. `space_server`; daraus bestimmt der Workflow die Assignment Group |
 | Finding type | `finding_type` | `vulnerability`, `advisories`, `end-of-life`, `misconfiguration`, `other` |
 | Mondoo Ticket URL | `mondoo_ticket_url` | Link auf den Case in Mondoo |
 | Number of affected assets | `number_of_affected_assets` | `assetsCount`, sonst Anzahl Assets aus den Refs |

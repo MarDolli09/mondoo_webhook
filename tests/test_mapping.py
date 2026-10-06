@@ -1,5 +1,6 @@
 """ServiceNow-Mapping: Titel, Katalogvariablen, RITM-Felder und Beobachter."""
 
+import logging
 import unittest
 
 import tests  # noqa: F401  (Dummy-Umgebung)
@@ -10,6 +11,8 @@ from app.services.servicenow import mapping
 ALEXANDER = "//captain.api.mondoo.app/users/2nZF38ZPg7vhizUrgIHqRF1aUwu"
 # Mondoo-Benutzer-MRN -> Name in ServiceNow, wie ihn der Startpunkt uebergibt
 USER_NAMES = {ALEXANDER: "Alexander Haller"}
+# Mondoo-Space-ID -> Auswahlwert der Variable mondoo_space (Space "s" aus make_case)
+SPACE_CHOICES = {"s": "space_server"}
 
 # Variablen des ServiceNow-Formulars "Mondoo Vulnerability" in Formularreihenfolge
 FORM_VARIABLES = [
@@ -86,11 +89,28 @@ class TitleTest(unittest.TestCase):
 
 class CatalogVariablesTest(unittest.TestCase):
     def test_variables_match_servicenow_form(self) -> None:
-        variables = mapping.build_catalog_variables(make_case(), USER_NAMES)
+        variables = mapping.build_catalog_variables(
+            make_case(), USER_NAMES, SPACE_CHOICES
+        )
         self.assertEqual(list(variables), FORM_VARIABLES)
         self.assertEqual(variables["number_of_affected_assets"], "4")
         self.assertEqual((variables["urgency"], variables["impact"]), ("1", "1"))
         self.assertEqual(variables["created_by"], "Alexander Haller")
+        # Auswahlwert, nicht der Anzeigename: daraus bestimmt der Workflow die Gruppe
+        self.assertEqual(variables["mondoo_space"], "space_server")
+
+    def test_unknown_space_keeps_display_name_and_logs_error(self) -> None:
+        case = make_case(owner_mrn="//captain.api.mondoo.app/spaces/neu")
+        receiver_logger = logging.getLogger("mondoo-receiver")
+        receiver_logger.disabled = False
+        try:
+            with self.assertLogs(receiver_logger, level="ERROR") as captured:
+                choice = mapping.space_choice(case, SPACE_CHOICES)
+        finally:
+            receiver_logger.disabled = True
+
+        self.assertEqual(choice, "Server")
+        self.assertIn("SPACE_CHOICE_MAP", captured.output[0])
 
 
 class TaskFieldsTest(unittest.TestCase):

@@ -330,14 +330,20 @@ nicht „Mission-Critical".
      Kommt gar nichts an, hat Mondoo nichts gesendet: kein Case-Ereignis im
      Space, Case läuft über eine andere Integration, oder die Integration ist
      fehlerhaft. Unter „External Tickets“ zeigt Mondoo „Webhook <UUID>“, nicht
-     die RITM-Nummer. Die UUID ist vermutlich die `webhook-id` der
-     Anlage-Zustellung (steht in `Webhook empfangen (webhook-id …)`); darüber
-     findet man im Log Correlation-ID und RITM (noch nicht bestätigt).
+     die RITM-Nummer. Die UUID ist die `webhook-id` der Anlage-Zustellung
+     (steht in `Webhook empfangen (webhook-id …)`); darüber findet man im Log
+     Correlation-ID und RITM (bestätigt 06.10., z. B. 207B7E0F… = RITM0043079).
+     **Fehlt die UUID** trotz HTTP 200, hat Mondoo die Antwort vermutlich nicht
+     abgewartet (siehe Checkliste, „Zeitgrenze bei Mondoo“).
   2. `MONDOO_API_KEY` braucht Lesezugriff auf den neuen Space, sonst Ticket
      ohne CVSS/Risk plus ERROR und Alarm.
   3. Space muss in der EU-Region liegen (`eu-…`), der GraphQL-Endpunkt ist
      fest `eu.api.mondoo.com`.
-  4. Anzeigename in `CATEGORY_MAP` (`app/core/master_data.py`) ergänzen.
+  4. Anzeigename in `CATEGORY_MAP` und Auswahlwert der Katalogvariable
+     „Mondoo Space“ in `SPACE_CHOICE_MAP` (`app/core/master_data.py`)
+     ergänzen; die Auswahl muss es im Formular samt Gruppe im Workflow geben.
+     Fehlt der Eintrag, schreibt die App ERROR (Alarm), der SCTASK landet bei
+     der ersten Auswahl (Azure).
 - **Ausnahmen in Mondoo und Ticket-Abschluss.** Test am 30.09.: Ticket
   „[CRITICAL] Mitigate vulnerability CVE-2026-64564 on Testserver-Ubuntu“
   (18:07), danach Ausnahme „Test“ (exception-3, Risk Accepted, unbefristet,
@@ -718,11 +724,61 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
       **Ergebnis nach dem Deployment (06.10., 07:44 UTC):** RITM0043077,
       `SCTASK0042547: 'Mondoo Vulnerability - Azure' durch Tickettitel ersetzt
       (Gruppe nach 1.2 s gefunden)`, Case aus dem Space *Azure*, Text also
-      richtig. 1,2 s hätten auch die alten 6 s gereicht; die Ursache bei
-      RITM0043075 ist damit **nicht belegt**. Klären über dessen Logzeilen in
-      Log Analytics (vor Ablauf der 30 Tage): „Kein SCTASK … gefunden“ heißt
-      Workflow zeitweise langsamer als 6 s (dann sind die 10 s die Lösung);
-      fehlt jede SCTASK-Zeile, lief bis zum Deployment ein älterer Stand.
+      richtig. 1,2 s hätten auch die alten 6 s gereicht.
+      **Ursache bei RITM0043075 belegt (Log Analytics, 05.10. 19:11 UTC):**
+      RITM angelegt 19:11:04.6, `Kein SCTASK mit Assignment Group zu
+      RITM0043075 gefunden` um 19:11:10.96, also volle 6 s ohne Gruppe. Der
+      Workflow braucht für die Gruppe also zeitweise länger als 6 s; die 10 s
+      sind die Lösung, solange er unter 10 s bleibt (Zeitpunkt der Gruppe im
+      Verlauf von SCTASK0042545 prüfen). Antwort an Mondoo nach 13,8 s mit
+      HTTP 200. **Zweiter Fall „Azure“ für einen Server-Case:** Ticketdaten
+      „Space Server“ (CVE-2026-63073 auf Testserver-Ubuntu), Workflow-Text
+      „Mondoo Vulnerability - Azure“. Damit landen Server-Befunde womöglich bei
+      der Azure-Gruppe (REQ-M07); Zuweisungsgruppe von SCTASK0042545 prüfen und
+      mit dem Admin klären, woraus der Workflow den Space liest.
+- [ ] **Testreihe über alle neun Spaces (06.10., 09:22–09:32 UTC):** 19
+      Tickets in Mondoo eröffnet, alle als RITM angelegt (RITM0043078–96, HTTP
+      200, Bewertung und Priorität korrekt, zwei parallele Zustellungen ohne
+      Probleme). **Routing:** Der Workflow-Text lautet bei *jedem* Space
+      „Mondoo Vulnerability - Azure“ (Windows-Clients, Domänen, Defender,
+      Grafana, IP-Adressen, M365, VMware, vorher Server); die Middleware meldet
+      jeweils den richtigen Space. **Ursache gefunden (06.10.):** Die Variable
+      „Mondoo Space“ ist in ServiceNow eine Auswahl mit Werten wie
+      `space_server`, `space_windows_clients` (Beschriftung „Server“, „Windows
+      Clients“); die App schickte den Anzeigenamen aus `CATEGORY_MAP`
+      („Server“). Unbekannte Werte landen bei der ersten Auswahl „Azure“; nur
+      Azure-Cases waren deshalb zufällig richtig. **Fix:** neue Stammdaten
+      `SPACE_CHOICE_MAP` (Space-ID → Auswahlwert), `mondoo_space` erhält den
+      Auswahlwert; fehlt ein Space, ERROR und Anzeigename wie bisher. Nach
+      dem Deployment je Space ein Ticket eröffnen und mit der Prüfabfrage
+      „Routing“ (Chat 06.10.) gegenprüfen; erwartet wird z. B. „Mondoo
+      Vulnerability - Server“. Bereits angelegte SCTASKs außerhalb von Azure
+      (Server ab RITM0043040, Testreihe RITM0043078–96) tragen vermutlich die
+      Azure-Gruppe; prüfen und bei Bedarf von Hand umhängen.
+- [ ] **Zeitgrenze bei Mondoo prüfen:** CVE-2026-59564 (RITM0043078,
+      Antwort nach 6,6 s) zeigt in Mondoo nach 5 min kein External Ticket,
+      die Zustellungen mit 2,7–4,6 s schon. Vermutlich wartet Mondoo nur rund
+      5 s auf die Antwort. Gegenprobe in Mondoo: RITM0043087 (5,8 s, Grafana),
+      RITM0043077 (6,2 s, Azure), RITM0043075 (13,8 s, Server) und „Most Recent
+      Activity“ der Integration. Bestätigt sich das, den SCTASK-Titel nach der
+      Antwort an Mondoo setzen (Hintergrundaufgabe) statt die Antwort zu
+      verzögern.
+- [ ] **SCTASK-Titel bei RITM0043076** (06.10. 07:00 UTC, Azure) nicht
+      gesetzt, Verarbeitung 15,8 s. Lief noch mit 6 s (vor `2a91e74`, Commit
+      07:29 UTC). Wie RITM0043075 (05.10. 19:11) war es das erste Ticket nach
+      längerer Pause; danach stand die Gruppe nach 0,1–3,3 s. Muster
+      beobachten: Fehlt der Titel beim ersten Ticket nach einer Pause auch mit
+      10 s, Business Rule (A) oder Hintergrundaufgabe mit längerer Wartezeit.
+- [ ] **Telemetrie-Auswertung:** Für die Übergabezeit nach
+      `mondoo_event == "TYPE_CREATED"` filtern (entfernt RITM0043045, eine
+      Folgezustellung). Bleiben 58 Zustellungen. RITM0043026–28 (30.09.,
+      12:13–12:15 UTC, Azure) sind echte Anlage-Zustellungen, kamen aber 18
+      bis 66 min nach der Ticketanlage an. Ursache offen: Mondoo verspätet oder
+      erster Versuch gescheitert und später wiederholt (dann gibt es für
+      dieselbe `webhook-id` frühere Logzeilen). Ohne sie (n = 55):
+      Übergabezeit Median 33,6 s, Mittel 34,1 s, Max 66,5 s; mit ihnen Median
+      34,1 s, Mittel 183,5 s. 53 von 58 unter 60 s. „Most Recent Activity“
+      der Integration zeigt noch keine Daten (06.10.).
 - [ ] In ServiceNow „Map to field" für die Variablen `urgency` → Urgency und
       `impact` → Impact aktivieren (`bmsptest` und vor dem Livegang `bmsp`).
 - [x] Architektur-Review und Refactoring W1–W8, I1–I7 (01.10., Abschnitt 3

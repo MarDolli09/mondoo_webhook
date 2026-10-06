@@ -118,6 +118,7 @@ def _ticket_synchronizer(http_client: httpx.AsyncClient) -> TicketSynchronizer:
         requested_for_sys_id=settings.SNOW_REQUESTED_FOR_SYS_ID,
         user_lookup_fields=tuple(settings.SNOW_USER_LOOKUP_FIELDS),
         user_names=dict(master_data.USER_MAP),
+        space_choices=dict(master_data.SPACE_CHOICE_MAP),
     )
     api = ServiceNowAPI.connect(
         http_client, ServiceNowAuth(http_client, config), ReferenceCache(), config

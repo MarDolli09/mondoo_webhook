@@ -75,7 +75,9 @@ class ServiceNowClient(TicketSynchronizer):
         # Ohne sysparm_requested_for traegt ServiceNow den angemeldeten Benutzer
         # ein. Im Namen eines anderen zu bestellen ist dort rollenpflichtig.
         request_sys_id = await self._api.catalog.order(
-            build_catalog_variables(case, self._config.user_names),
+            build_catalog_variables(
+                case, self._config.user_names, self._config.space_choices
+            ),
             requested_for_sys_id=self._config.requested_for_sys_id or None,
         )
         ritm = await self._api.request_items.find_for_request(request_sys_id)
