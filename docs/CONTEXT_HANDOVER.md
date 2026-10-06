@@ -742,14 +742,22 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
       Probleme). **Routing:** Der Workflow-Text lautet bei *jedem* Space
       „Mondoo Vulnerability - Azure“ (Windows-Clients, Domänen, Defender,
       Grafana, IP-Adressen, M365, VMware, vorher Server); die Middleware meldet
-      jeweils den richtigen Space. **Ursache gefunden (06.10.):** Die Variable
-      „Mondoo Space“ ist in ServiceNow eine Auswahl mit Werten wie
+      jeweils den richtigen Space. **Ursache gefunden (06.10.):** Der Workflow
+      bestimmt die Gruppe über eine Auswahlliste mit Werten wie
       `space_server`, `space_windows_clients` (Beschriftung „Server“, „Windows
       Clients“); die App schickte den Anzeigenamen aus `CATEGORY_MAP`
       („Server“). Unbekannte Werte landen bei der ersten Auswahl „Azure“; nur
-      Azure-Cases waren deshalb zufällig richtig. **Fix:** neue Stammdaten
-      `SPACE_CHOICE_MAP` (Space-ID → Auswahlwert), `mondoo_space` erhält den
-      Auswahlwert; fehlt ein Space, ERROR und Anzeigename wie bisher. Nach
+      Azure-Cases waren deshalb zufällig richtig. **Fix (`527105c`):** neue
+      Stammdaten `SPACE_CHOICE_MAP` (Space-ID → Auswahlwert), `mondoo_space`
+      erhält den Auswahlwert; fehlt ein Space, ERROR und Anzeigename wie
+      bisher. **Anzeige im Ticket (06.10., RITM0043097):** Die Variable
+      `mondoo_space` ist im Formular ein Textfeld, keine Auswahl; der SCTASK
+      zeigt deshalb `space_vmware` statt „VMware“. Soll die Beschriftung
+      erscheinen, muss der Admin die Variable auf eine Auswahl (Select Box)
+      mit genau diesen Werten umstellen; die App schickt den Wert unverändert
+      weiter, der Workflow bleibt gleich. Die Anzeigenamen der App in Logs und
+      Telemetrie („Windows-Clients“, „Domänen“) weichen von den
+      Beschriftungen ab. Nach
       dem Deployment je Space ein Ticket eröffnen und mit der Prüfabfrage
       „Routing“ (Chat 06.10.) gegenprüfen; erwartet wird z. B. „Mondoo
       Vulnerability - Server“. Bereits angelegte SCTASKs außerhalb von Azure

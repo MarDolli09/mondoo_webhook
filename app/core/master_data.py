@@ -32,9 +32,10 @@ class MasterData(BaseSettings):
         "eu-sweet-sanderson-152264": "Windows-Clients",
     }
 
-    # Mondoo-Space-ID -> Wert der Auswahl "Mondoo Space" im Katalogformular
-    # (Variable mondoo_space). Daraus bestimmt der Workflow die Assignment Group;
-    # ein unbekannter Wert landet dort bei der ersten Auswahl (Azure).
+    # Mondoo-Space-ID -> Auswahlwert fuer die Variable mondoo_space. Daraus
+    # bestimmt der Workflow die Assignment Group; ein unbekannter Wert landet
+    # bei der ersten Auswahl (Azure). Als Select Box mit diesen Werten zeigt
+    # das Ticket die Beschriftung (z. B. "Server"), als Textfeld den Wert.
     SPACE_CHOICE_MAP: dict[str, str] = {
         "eu-elastic-hodgkin-413342": "space_azure",
         "eu-peaceful-elgamal-693498": "space_microsoft_defender_for_cloud",
