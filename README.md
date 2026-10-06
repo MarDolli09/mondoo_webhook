@@ -55,8 +55,9 @@ RITM-Felder per PATCH nach der Bestellung: `state` (1), `correlation_id`,
 
 Danach bekommt der SCTASK den Tickettitel: Der Workflow legt ihn mit
 „Mondoo Vulnerability - <Space>“ an und bestimmt daraus die Assignment Group.
-Die App sucht bis zu rund 6 s nach Tasks zum RITM mit gesetzter Assignment
-Group und ersetzt nur diesen Workflow-Text. Gelingt das nicht, bleibt der Task
+Die App sucht bis zu rund 10 s nach Tasks zum RITM mit gesetzter Assignment
+Group und ersetzt nur diesen Workflow-Text; die Logzeile nennt, nach wie vielen
+Sekunden die Gruppe gesetzt war. Gelingt das nicht, bleibt der Task
 unverändert (WARNING im Log), das RITM ist davon nicht betroffen.
 Folgeereignisse aktualisieren `work_notes`,
 bei ermittelter Priorität `urgency`/`impact` und schließen bei Close/Delete.
@@ -115,7 +116,7 @@ Eine Zeile je Schritt, z. B.:
 [INFO] [a18f4807] Kein RITM zum Case vorhanden, bestelle neuen Request.
 [INFO] [a18f4807] Service Catalog Request REQ0038907 erzeugt.
 [INFO] [a18f4807] RITM0043072 angelegt (Status Offen): Mondoo - [CRITICAL] CVE-2026-62818
-[INFO] [a18f4807] SCTASK0042543: 'Mondoo Vulnerability - Server' durch Tickettitel ersetzt.
+[INFO] [a18f4807] SCTASK0042543: 'Mondoo Vulnerability - Server' durch Tickettitel ersetzt (Gruppe nach 1.3 s gefunden).
 ```
 
 * `[a18f4807]` sind die ersten 8 Zeichen der Correlation-ID; damit findet man

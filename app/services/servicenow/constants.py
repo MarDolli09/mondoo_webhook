@@ -73,8 +73,8 @@ RITM_RESOLVE_DELAYS = (0.0, 0.5, 1.0, 2.0)
 
 # Ein Workflow legt den SCTASK mit "Mondoo Vulnerability - <Space>" an und
 # bestimmt daraus die Assignment Group. Erst danach darf der Tickettitel den
-# Text ersetzen. Wartezeiten in Sekunden zwischen den Suchen (maximal 6 s).
-CATALOG_TASK_LOOKUP_DELAYS = (0.0, 1.0, 2.0, 3.0)
+# Text ersetzen. Wartezeiten in Sekunden zwischen den Suchen (maximal 10 s).
+CATALOG_TASK_LOOKUP_DELAYS = (0.0, 1.0, 2.0, 3.0, 4.0)
 # Nur Tasks mit dem Text des Workflows werden ueberschrieben; von Hand
 # geaenderte Short Descriptions bleiben erhalten.
 CATALOG_TASK_WORKFLOW_TITLE_PREFIX = "Mondoo Vulnerability"

@@ -1,5 +1,6 @@
 """Synchronisiert normalisierte Cases als RITM in ServiceNow."""
 
+import time
 from typing import Any, Optional
 
 from app.core.exceptions import ServiceNowAPIError
@@ -110,11 +111,14 @@ class ServiceNowClient(TicketSynchronizer):
         davon nicht betroffen.
         """
         try:
+            started = time.perf_counter()
             tasks = await self._api.catalog_tasks.find_assigned(ritm_sys_id)
+            waited = time.perf_counter() - started
             if not tasks:
                 logger.warning(
-                    f"Kein SCTASK mit Assignment Group zu {ritm_number} "
-                    f"gefunden. Die Short Description des Tasks bleibt unveraendert."
+                    f"Kein SCTASK mit Assignment Group zu {ritm_number} nach "
+                    f"{waited:.1f} s gefunden. Die Short Description des Tasks "
+                    f"bleibt unveraendert."
                 )
                 return
 
@@ -130,7 +134,8 @@ class ServiceNowClient(TicketSynchronizer):
                     task["sys_id"], {"short_description": title}
                 )
                 logger.info(
-                    f"{task.get('number')}: '{current}' durch Tickettitel ersetzt."
+                    f"{task.get('number')}: '{current}' durch Tickettitel ersetzt "
+                    f"(Gruppe nach {waited:.1f} s gefunden)."
                 )
         except ServiceNowAPIError as exc:
             logger.warning(

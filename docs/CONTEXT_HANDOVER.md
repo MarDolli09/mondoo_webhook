@@ -703,6 +703,21 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
       ersetzt`. **Auffällig:** Der Case kam aus dem Space *Server*, der
       Workflow-Text nennt aber *Azure*. Assignment Group dieses SCTASK prüfen
       und klären, woraus der Workflow den Space liest.
+      **Seit 06.10. kein Titel mehr:** SCTASK0042545 (RITM0043075) behält
+      „Mondoo Vulnerability - Azure“, am 01.10. klappte es noch (z. B.
+      SCTASK0042537). Der Code ist seit `dbf30e3` (01.10.) unverändert, dort
+      änderten sich nur Logtexte; die Ursache liegt also in ServiceNow oder in
+      der Zeit bis zur Gruppenzuordnung. Klären über die Logzeile zum RITM:
+      „durch Tickettitel ersetzt“ (danach von ServiceNow überschrieben,
+      SCTASK-Verlauf prüfen), „Kein SCTASK mit Assignment Group“ (Gruppe nicht
+      binnen 6 s gesetzt) oder „nicht gesetzt: HTTP …“ (Rechte auf `sc_task`).
+      Im SCTASK-Verlauf keine spätere Änderung durch ServiceNow (06.10.).
+      **Versuch (06.10.):** Wartezeit auf 10 s erhöht
+      (`CATALOG_TASK_LOOKUP_DELAYS`); beide Logzeilen nennen jetzt die
+      Wartezeit („Gruppe nach … s gefunden“ bzw. „nach … s“). Nach dem
+      Deployment beim nächsten Ticket prüfen. Hilft es, Sequenzdiagramm
+      („≤ 6 s“) nachziehen; hilft es nicht, Rechte auf `sc_task` oder
+      Business Rule (A) verfolgen.
 - [ ] In ServiceNow „Map to field" für die Variablen `urgency` → Urgency und
       `impact` → Impact aktivieren (`bmsptest` und vor dem Livegang `bmsp`).
 - [x] Architektur-Review und Refactoring W1–W8, I1–I7 (01.10., Abschnitt 3
