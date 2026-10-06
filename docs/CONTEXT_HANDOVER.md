@@ -712,12 +712,17 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
       SCTASK-Verlauf prüfen), „Kein SCTASK mit Assignment Group“ (Gruppe nicht
       binnen 6 s gesetzt) oder „nicht gesetzt: HTTP …“ (Rechte auf `sc_task`).
       Im SCTASK-Verlauf keine spätere Änderung durch ServiceNow (06.10.).
-      **Versuch (06.10.):** Wartezeit auf 10 s erhöht
-      (`CATALOG_TASK_LOOKUP_DELAYS`); beide Logzeilen nennen jetzt die
-      Wartezeit („Gruppe nach … s gefunden“ bzw. „nach … s“). Nach dem
-      Deployment beim nächsten Ticket prüfen. Hilft es, Sequenzdiagramm
-      („≤ 6 s“) nachziehen; hilft es nicht, Rechte auf `sc_task` oder
-      Business Rule (A) verfolgen.
+      **Wartezeit auf 10 s erhöht (06.10.)** (`CATALOG_TASK_LOOKUP_DELAYS`);
+      beide Logzeilen nennen jetzt die Wartezeit („Gruppe nach … s gefunden“
+      bzw. „nach … s“). Sequenzdiagramm auf „≤ 10 s“ nachgezogen.
+      **Ergebnis nach dem Deployment (06.10., 07:44 UTC):** RITM0043077,
+      `SCTASK0042547: 'Mondoo Vulnerability - Azure' durch Tickettitel ersetzt
+      (Gruppe nach 1.2 s gefunden)`, Case aus dem Space *Azure*, Text also
+      richtig. 1,2 s hätten auch die alten 6 s gereicht; die Ursache bei
+      RITM0043075 ist damit **nicht belegt**. Klären über dessen Logzeilen in
+      Log Analytics (vor Ablauf der 30 Tage): „Kein SCTASK … gefunden“ heißt
+      Workflow zeitweise langsamer als 6 s (dann sind die 10 s die Lösung);
+      fehlt jede SCTASK-Zeile, lief bis zum Deployment ein älterer Stand.
 - [ ] In ServiceNow „Map to field" für die Variablen `urgency` → Urgency und
       `impact` → Impact aktivieren (`bmsptest` und vor dem Livegang `bmsp`).
 - [x] Architektur-Review und Refactoring W1–W8, I1–I7 (01.10., Abschnitt 3
