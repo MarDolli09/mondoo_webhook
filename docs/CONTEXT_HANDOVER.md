@@ -412,13 +412,17 @@ nicht „Mission-Critical".
   `build_update_fields` setzt bei `TYPE_CLOSED` das RITM auf 3 (bei
   `TYPE_DELETED` auf 7), unabhängig von offenen SCTASKs. Schließt Mondoo das
   Ticket, bevor der Prüf-SCTASK erledigt ist, umgeht die App die Prüfung.
-  Entscheidung offen: bei offenen SCTASKs nur Arbeitsnotiz statt Abschluss,
-  oder das Schließen ganz dem Workflow überlassen. Den zweiten SCTASK fasst
-  die App nicht an (sie sucht nur direkt nach der Anlage). Festgelegt im
-  BPMN-Prozess (05.10.): Die IT-Sicherheit setzt einen nicht bestandenen
-  Prüf-SCTASK auf „Closed Incomplete“, der Workflow legt dann einen
-  Nacharbeits-SCTASK für den Admin an; nur „Closed Complete“ schließt das
-  RITM. Bei einer vollständig genehmigten Ausnahme schließt der Admin seinen
+  **Entschieden (08.10.):** Der Abschluss durch die App ist bekannt und
+  akzeptiert, der Code bleibt so. SCTASKs, die nach dem automatischen
+  Abschluss noch offen sind („tote“ Tasks), werden manuell geschlossen. Den
+  zweiten SCTASK fasst die App nicht an (sie sucht nur direkt nach der
+  Anlage). **Nacharbeit (Stand 08.10., ersetzt die Fassung vom 05.10.):**
+  Zeigt die Prüfung noch verwundbare Assets, setzt die IT-Sicherheit den
+  Prüf-SCTASK auf „Work in Progress“ (nicht „Closed Incomplete“), und der
+  Workflow öffnet den Behebungs-SCTASK wieder (Wiederöffnen wird unterstützt);
+  es entsteht kein Nacharbeits-SCTASK. Der Prüf-SCTASK geht erst auf „Closed
+  Complete“, wenn die Behebung erfolgreich war, und nur das schließt das RITM.
+  Bei einer vollständig genehmigten Ausnahme schließt der Admin seinen
   SCTASK, danach läuft die normale Prüfung.
 - **`mondoo_mrn` ohne „Map to field"**: Die `correlation_id` setzt erst der PATCH
   nach der Bestellung. Schlägt der fehl, entsteht beim nächsten Ereignis ein
@@ -605,8 +609,14 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
 
 - Instanz-URL, Katalog-sys_id, Client-ID, Client Secret und Passwort gehören
   immer zusammen zu einer Instanz und müssen gemeinsam umgestellt werden.
-- Key-Vault-Referenzen werden beim Start aufgelöst; nach Änderungen ist ein
-  Neustart nötig.
+- Key-Vault-Referenzen werden beim Start aufgelöst. App Service hält die Werte
+  zwischengespeichert und holt sie nur rund alle 24 h neu. Eine neue
+  Secret-Version wirkt sofort erst nach einer Konfigurationsänderung der App
+  (z. B. eine App-Einstellung speichern), die einen Neustart samt Neuabruf
+  auslöst; ein einfacher Neustart reicht nicht sicher (beobachtet 08.10.:
+  neue `SNOW-CATALOG-ITEM-SYS-ID` griff nicht). Referenzen ohne Version
+  angeben, sonst bleibt die alte Version fest. Welcher Wert gilt, zeigt die
+  Startzeile „ServiceNow: …, Katalog-Item <sys_id>“.
 - Deployment über Oryx mit komprimierter Ausgabe: In `wwwroot` liegen
   `oryx-manifest.toml` und `output.tar.zst`, nicht der Quellcode.
 - Die Testinstanz nutzt ein Konto, das auch Kollegen verwenden. Wiederholte
@@ -657,6 +667,23 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
       `SNOW_AUTH_MODE=oauth`.
 - [ ] Vor dem Livegang das Katalogformular auf `bmsp` prüfen: sys_id und
       Variablennamen. Bei Abweichung die Zuordnung konfigurierbar machen.
+      **Erster Versuch (08.10.):** Instanz-URL auf `bmsp` umgestellt, gleiche
+      Zugangsdaten. Anmeldung klappt mit Basic und OAuth, auch die RITM-Suche
+      (Table API). `order_now` antwortet aber mit HTTP 400 „Security
+      constraints prevent ordering of Item“ (Katalog-sys_id von `bmsptest`,
+      `55ab0bba…`), Webhook 502. Das ist die Bestellprüfung des Katalogs, kein
+      Anmeldefehler. Prüfen: gibt es das Formular auf `bmsp` unter dieser
+      sys_id (sonst `SNOW-CATALOG-ITEM-SYS-ID` im Key Vault anpassen und neu
+      starten), ist es aktiv und einem Katalog zugeordnet, und erlauben
+      „Available for“/„Not available for“ bzw. Rollen dem Benutzer
+      `mosca.rest` die Bestellung (Test: Benutzer imitieren, Formular im
+      Portal öffnen). Danach Workflow mit SCTASK und Gruppen je Space, Auswahl
+      „Mondoo Space“, „Map to field“ und Schreibrechte auf `sc_task` auf
+      `bmsp` prüfen. Zustellungen während der Störung haben kein RITM.
+      **Stand 08.10., 09:48 UTC:** sys_id im Key Vault auf das Formular von
+      `bmsp` geändert (`a2bf7e3a…`), nach Konfigurationsänderung aktiv
+      (Startzeile „Katalog-Item a2bf…“, OAuth, `mosca.rest`). Nächster
+      Nachweis: neues Ticket bis RITM und SCTASK samt Gruppe auf `bmsp`.
 - [ ] „Map to field" für `mondoo_mrn` auf `correlation_id` aktivieren.
 - [x] Urgency/Impact beim Anlegen (`c80a5e8`) im Betrieb bestätigt
       (RITM0043065, 01.10.).
@@ -683,15 +710,16 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
       geschlossen, rund 11 min nach Freigabe der Ausnahme (30.09.).
 - [ ] Prozess festlegen (Termin Vorgesetzter): Umgang mit abgelaufenen
       Ausnahmen (Finding zählt wieder, aber kein automatisches neues Ticket).
-- [ ] Zweistufige SCTASKs (Abschnitt 5): entscheiden, ob die App bei
-      `TYPE_CLOSED`/`TYPE_DELETED` das RITM trotz offener SCTASKs schließen
-      darf; im Workflow umsetzen lassen: „Closed Incomplete“ am Prüf-SCTASK
-      legt einen Nacharbeits-SCTASK an, nur „Closed Complete“ schließt das
-      RITM (siehe BPMN-Prozess).
+- [x] Zweistufige SCTASKs (Abschnitt 5, entschieden 08.10.): Die App darf
+      das RITM bei `TYPE_CLOSED`/`TYPE_DELETED` trotz offener SCTASKs
+      schließen; offene Tasks werden manuell geschlossen. Nacharbeit:
+      Prüf-SCTASK auf „Work in Progress“, Behebungs-SCTASK wird wieder
+      geöffnet, nur „Closed Complete“ am Prüf-SCTASK schließt das RITM.
 - [x] BPMN-Prozess an den Ist-Stand angepasst (05.10., `docs/bpmn-process.*`):
-      SCTASKs, automatische Schritte, Abschluss durch Mondoo. Bei einer
-      Entscheidung zum RITM-Abschluss (Punkt oben) das Gateway „RITM bereits
-      geschlossen?“ im Diagramm nachziehen.
+      SCTASKs, automatische Schritte, Abschluss durch Mondoo.
+- [ ] `docs/bpmn-process.*` an die Entscheidung vom 08.10. anpassen: Die
+      Repo-Fassung zeigt noch „Closed Incomplete“ und einen
+      Nacharbeits-SCTASK sowie „In Progress“ statt „Work in Progress“.
 - [ ] Protokollstream zeigt seit 30.09. „No new trace“, obwohl Log Analytics
       Einträge hat: *App Service-Protokolle* (Anwendungsprotokollierung
       Dateisystem) prüfen.
