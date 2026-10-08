@@ -229,11 +229,13 @@ class FakeBackends:
         if self.task_status != 200:
             return httpx.Response(self.task_status, json={"error": "simuliert"})
         if method == "GET":
+            tasks = list(self.catalog_tasks)
             # Wie ServiceNow: nur Tasks, deren Assignment Group schon gesetzt ist
-            assigned = [t for t in self.catalog_tasks if t.get("assignment_group")]
-            if "assignment_groupISNOTEMPTY" not in query:
-                assigned = list(self.catalog_tasks)
-            return httpx.Response(200, json={"result": assigned})
+            if "assignment_groupISNOTEMPTY" in query:
+                tasks = [t for t in tasks if t.get("assignment_group")]
+            if "active=true" in query:
+                tasks = [t for t in tasks if t.get("active", "true") == "true"]
+            return httpx.Response(200, json={"result": tasks})
         sys_id = path.rsplit("/", 1)[1]
         task = next(t for t in self.catalog_tasks if t["sys_id"] == sys_id)
         task.update(body or {})

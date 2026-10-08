@@ -8,6 +8,7 @@ Standardbibliothek und den API-Key in der Umgebung.
 |---|---|
 | `verify_scores.py` | Führt die Abfrage aus `app/services/mondoo/queries.py` gegen die echte API aus und zeigt, welche Werte im Ticket landen würden. |
 | `introspect_next.py` | Introspektion: welche weiteren Daten die API liefern kann (Space-Name, Benutzer zur `createdBy`-MRN, `mrns`-Sammelfilter, EPSS, Risk-Faktoren). |
+| `verify_open_findings.py` | Zählt je Asset-Scope die Knoten eines Findings für die Zustände OPEN, CLOSED, EXCEPTION und ALL. Grundlage der geplanten Prüfung bei `TYPE_CLOSED`, ob noch offene, nicht ausgenommene Findings bestehen. |
 
 ## Ausführen
 

@@ -34,6 +34,15 @@ class CatalogTasks:
             ),
         )
 
+    async def find_active(self, ritm_sys_id: str) -> list[Record]:
+        """Noch nicht geschlossene SCTASKs eines RITM."""
+        return await self._transport.query(
+            TABLE_CATALOG_TASK,
+            query=f"request_item={ritm_sys_id}^active=true",
+            fields="sys_id,number,short_description",
+            limit=10,
+        )
+
     async def patch(self, task_sys_id: str, body: dict[str, Any]) -> Record:
         """Aktualisiert Felder eines SCTASK und liefert Nummer und Short Description."""
         result = await self._transport.request(

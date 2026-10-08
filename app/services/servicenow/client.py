@@ -7,7 +7,7 @@ from app.core.exceptions import ServiceNowAPIError
 from app.core.logging import logger
 from app.domain.ports import SyncAction, SyncOutcome, TicketSynchronizer
 from app.models.case import NormalizedCase
-from app.models.mondoo import CLOSING_EVENTS
+from app.models.mondoo import CLOSING_EVENTS, MondooEventType
 from app.services.servicenow.api import ServiceNowAPI
 from app.services.servicenow.config import ServiceNowConfig
 from app.services.servicenow.constants import (
@@ -18,6 +18,7 @@ from app.services.servicenow.constants import (
 from app.services.servicenow.mapping import (
     build_catalog_variables,
     build_create_fields,
+    build_task_closing_fields,
     build_update_fields,
     correlation_id,
     ticket_title,
@@ -177,11 +178,38 @@ class ServiceNowClient(TicketSynchronizer):
         logger.info(
             f"{updated.get('number')} aktualisiert (state={updated.get('state')})."
         )
+        # Erst das RITM, dann die Tasks: Der Abschluss haengt nicht an den Tasks.
+        if case.event_type is MondooEventType.CLOSED:
+            await self._close_catalog_tasks(ritm_sys_id, str(updated.get("number")))
         return SyncOutcome(
             SyncAction.UPDATED,
             ticket_number=_text(updated.get("number")),
             ticket_id=_text(ritm_sys_id),
         )
+
+    async def _close_catalog_tasks(self, ritm_sys_id: str, ritm_number: str) -> None:
+        """Schliesst die noch offenen SCTASKs, nachdem Mondoo das Ticket schloss.
+
+        Scheitert das, bleibt das RITM geschlossen und die Tasks muessen von
+        Hand geschlossen werden.
+        """
+        try:
+            tasks = await self._api.catalog_tasks.find_active(ritm_sys_id)
+            if not tasks:
+                logger.debug(f"Keine offenen SCTASKs zu {ritm_number}.")
+            for task in tasks:
+                await self._api.catalog_tasks.patch(
+                    task["sys_id"], build_task_closing_fields()
+                )
+                logger.info(
+                    f"{task.get('number')} zu {ritm_number} geschlossen "
+                    f"(Mondoo hat das Ticket geschlossen)."
+                )
+        except ServiceNowAPIError as exc:
+            logger.warning(
+                f"Offene SCTASKs zu {ritm_number} nicht geschlossen: {exc.message}. "
+                f"Sie muessen von Hand geschlossen werden."
+            )
 
 
 def _text(value: Any) -> Optional[str]:

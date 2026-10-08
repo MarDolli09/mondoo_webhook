@@ -413,10 +413,25 @@ nicht „Mission-Critical".
   `TYPE_DELETED` auf 7), unabhängig von offenen SCTASKs. Schließt Mondoo das
   Ticket, bevor der Prüf-SCTASK erledigt ist, umgeht die App die Prüfung.
   **Entschieden (08.10.):** Der Abschluss durch die App ist bekannt und
-  akzeptiert, der Code bleibt so. SCTASKs, die nach dem automatischen
-  Abschluss noch offen sind („tote“ Tasks), werden manuell geschlossen. Den
-  zweiten SCTASK fasst die App nicht an (sie sucht nur direkt nach der
-  Anlage). **Nacharbeit (Stand 08.10., ersetzt die Fassung vom 05.10.):**
+  akzeptiert. **Seit 08.10. schließt die App bei `TYPE_CLOSED` nach dem RITM
+  auch alle noch aktiven SCTASKs** (`request_item=<RITM>^active=true`, State 3,
+  Arbeits- und Abschlussnotiz „Verifikation durch Mondoo-Scan“). Grundlage ist
+  die **Prozessregel: Mondoo-Tickets werden nicht von Hand geschlossen**, jedes
+  `TYPE_CLOSED` gilt also als Abschluss durch die Plattform. Bei
+  `TYPE_DELETED` bleiben die SCTASKs offen. Scheitert das Schließen (z. B.
+  fehlende Rechte), bleibt das RITM geschlossen, WARNING im Log, die Tasks
+  werden von Hand geschlossen. Offen: siehe Checkliste (Workflow legt nach
+  dem Schließen des Behebungs-SCTASK evtl. einen Prüf-SCTASK an; Notiztext
+  bei Abschluss nach Ausnahme).
+  **Wer geschlossen hat, steht nicht im Webhook (geprüft 08.10.):**
+  `createdBy` ist auch bei `TYPE_CLOSED` der Ersteller des Case, nicht der
+  Auslöser. Telemetrie 30.09.–08.10.: Bei allen 40 geschlossenen Cases mit beiden
+  Werten ist `creator` beim Schließen gleich dem beim Anlegen (bei 2 weiteren
+  fehlt der Datensatz zum Anlegen), auch bei RITM0043042, das
+  Mondoo nach der Ausnahme selbst geschlossen hat. „system“ steht nur bei
+  Cases, die Mondoo selbst angelegt hat (Fixture `3JKVzRAM…`). Eine Regel
+  „Plattform-Abschluss → SCTASKs schließen“ lässt sich daraus nicht ableiten,
+  deshalb die Prozessregel. **Nacharbeit (Stand 08.10., ersetzt die Fassung vom 05.10.):**
   Zeigt die Prüfung noch verwundbare Assets, setzt die IT-Sicherheit den
   Prüf-SCTASK auf „Work in Progress“ (nicht „Closed Incomplete“), und der
   Workflow öffnet den Behebungs-SCTASK wieder (Wiederöffnen wird unterstützt);
@@ -712,9 +727,30 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
       Ausnahmen (Finding zählt wieder, aber kein automatisches neues Ticket).
 - [x] Zweistufige SCTASKs (Abschnitt 5, entschieden 08.10.): Die App darf
       das RITM bei `TYPE_CLOSED`/`TYPE_DELETED` trotz offener SCTASKs
-      schließen; offene Tasks werden manuell geschlossen. Nacharbeit:
-      Prüf-SCTASK auf „Work in Progress“, Behebungs-SCTASK wird wieder
-      geöffnet, nur „Closed Complete“ am Prüf-SCTASK schließt das RITM.
+      schließen. Nacharbeit: Prüf-SCTASK auf „Work in Progress“,
+      Behebungs-SCTASK wird wieder geöffnet, nur „Closed Complete“ am
+      Prüf-SCTASK schließt das RITM.
+- [x] SCTASKs bei `TYPE_CLOSED` mitschließen (08.10., Prozessregel: keine
+      manuellen Abschlüsse in Mondoo). Notiz „Verifikation durch Mondoo-Scan“.
+      Noch nicht deployt.
+- [ ] Geplant: Bei `TYPE_CLOSED` per GraphQL prüfen, ob noch offene, nicht
+      ausgenommene Findings bestehen (`filter: {state: OPEN}`, laut Schema
+      „Only failing results“; Ausnahmen zählen zu `CLOSED`). Wenn ja: nichts
+      schließen, Arbeitsnotiz, ERROR (Alarm). Vorher
+      `scripts/verify_open_findings.py` in Kudu ausführen, je ein offenes,
+      behobenes und ausgenommenes Finding: Akzeptiert `findings` eine
+      Asset-MRN als Scope, und stimmen die Zählungen?
+- [ ] Auf `bmsptest` testen: Ticket mit offenem Behebungs-SCTASK von Mondoo
+      schließen lassen (Ausnahme genügt, schließt nach rund 11 min). Prüfen:
+      (1) beide Tasks geschlossen, Notiz da; (2) legt der Workflow nach dem
+      Schließen des Behebungs-SCTASK trotzdem einen Prüf-SCTASK an? Dann im
+      Flow die Bedingung „nur wenn RITM aktiv“ ergänzen lassen; (3) passt die
+      Notiz bei Abschluss nach Ausnahme (dort 0 Assets), sonst Text nach
+      `assetsCount` unterscheiden.
+- [ ] Schreibrecht von `mosca.rest` auf `sc_task` auf `bmsp` bestätigen
+      (Titel setzen und Schließen).
+- [ ] Prozessregel „Mondoo-Tickets nicht von Hand schließen“ an die
+      IT-Sicherheit kommunizieren (Prozessbeschreibung 4.3 anpassen).
 - [x] BPMN-Prozess an den Ist-Stand angepasst (05.10., `docs/bpmn-process.*`):
       SCTASKs, automatische Schritte, Abschluss durch Mondoo.
 - [ ] `docs/bpmn-process.*` an die Entscheidung vom 08.10. anpassen: Die

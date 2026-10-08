@@ -25,6 +25,7 @@ from app.services.servicenow.constants import (
 __all__ = [
     "build_catalog_variables",
     "build_create_fields",
+    "build_task_closing_fields",
     "build_update_fields",
     "correlation_id",
     "creator_display_name",
@@ -34,6 +35,7 @@ __all__ = [
 ]
 
 TICKET_TITLE_PREFIX = "Mondoo - "
+TASK_VERIFIED_NOTE = "Verifikation durch Mondoo-Scan"
 ELLIPSIS = "…"
 WATCH_LIST_SEPARATOR = ","
 
@@ -200,6 +202,20 @@ def _closing_fields(event_type: MondooEventType) -> dict[str, Any]:
             ),
         }
     return {}
+
+
+def build_task_closing_fields() -> dict[str, Any]:
+    """SCTASK-Felder, wenn Mondoo das Ticket geschlossen hat.
+
+    Prozessregel: Mondoo-Tickets werden nicht von Hand geschlossen. Ein
+    TYPE_CLOSED stammt daher von der Plattform, die den Befund im Scan als
+    behoben oder per Ausnahme erledigt sieht.
+    """
+    return {
+        "state": STATE_CLOSED_COMPLETE,
+        "work_notes": TASK_VERIFIED_NOTE,
+        "close_notes": TASK_VERIFIED_NOTE,
+    }
 
 
 def _truncate(value: str, limit: int) -> str:

@@ -42,7 +42,7 @@ FIXED_WATCHERS: tuple[str, ...] = ("lars.siefert@mosca.com",)
 AUTOMATED_CREATOR_LABEL = "Mondoo-Drift"
 
 # ---------------------------------------------------------------------- #
-# RITM-Zustaende
+# Zustaende von RITM und SCTASK (beide erben sie von der Tabelle task)
 # ---------------------------------------------------------------------- #
 STATE_OPEN = "1"
 STATE_CLOSED_COMPLETE = "3"

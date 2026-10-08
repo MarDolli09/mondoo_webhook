@@ -61,6 +61,12 @@ Sekunden die Gruppe gesetzt war. Gelingt das nicht, bleibt der Task
 unverändert (WARNING im Log), das RITM ist davon nicht betroffen.
 Folgeereignisse aktualisieren `work_notes`,
 bei ermittelter Priorität `urgency`/`impact` und schließen bei Close/Delete.
+Bei Close (`TYPE_CLOSED`) schließt die App nach dem RITM auch alle noch
+offenen SCTASKs (Closed Complete, Arbeits- und Abschlussnotiz „Verifikation
+durch Mondoo-Scan“). Grundlage ist die Prozessregel, dass Mondoo-Tickets nicht
+von Hand geschlossen werden; der Webhook verrät nicht, wer geschlossen hat.
+Bei Delete bleiben die SCTASKs offen. Scheitert das Schließen, bleibt das RITM
+geschlossen und die Tasks werden von Hand geschlossen (WARNING im Log).
 
 ## Architektur
 
