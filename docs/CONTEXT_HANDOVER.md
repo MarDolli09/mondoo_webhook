@@ -789,18 +789,39 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
       (Erfasser und Minuten gefüllt). Feld `time_worked` ist auch an allen
       SCTASKs 0, trotz Einträgen (0042574: 5 min, 0042576: 5+5 min,
       0042577: 10 min); im Formular von SCTASK0042576 prüfen, ob das Feld
-      dort einen Wert hat (sonst keine Aufsummierung). **Leichen belegt:**
-      27 von 28 RITMs mit Closed Complete haben einen offenen SCTASK (alle
-      außer RITM0043106), entstanden durch den RITM-Abschluss der App.
-      **Routing:** Alle 54 Behebungs-SCTASKs vom 01.10. bis 08.10. liegen in
-      „Mosca IT - M365 General“, unabhängig vom Space, auch nach dem Fix
-      `527105c` (z. B. RITM0043097 VMware, RITM0043103 Server); die
-      Zuordnung aus `mondoo_space` greift auf `bmsptest` nicht, Ursache mit
-      dem Admin klären. Prüf-SCTASK entsteht 1 s nach dem Behebungs-SCTASK
-      (0042574 → 0042575 und 0042576 → 0042577), Gruppe „Mosca IT -
-      Security“. `closed_at` von SCTASK0042576 zeigt 10:01:06 UTC, obwohl er
-      nach dem Wiederöffnen (10:03:56) erneut geschlossen wurde: `closed_at`
-      hält offenbar den ersten Abschluss; für Nacharbeit die Historie nutzen.
+      dort einen Wert hat (sonst keine Aufsummierung). **Offene Tasks:** 27
+      von 28 geschlossenen RITMs haben einen offenen SCTASK (Testbestand
+      `bmsptest`, alle außer RITM0043106). Dass die App sie geschlossen hat,
+      ist noch nicht belegt (Spalte „Geschlossen von“ fehlte); die Zeitpunkte
+      decken sich aber mit `TYPE_CLOSED`-Ereignissen der Telemetrie (01.10.
+      08:40, 02.10. 09:04–09:05). Als Argument für Variante B zählt der
+      Mechanismus (HTTP 403 durch die Regel) mehr als die Zahl.
+      **Routing:** 56 von 56 Behebungs-SCTASKs (01.10.–09.10., die zwei vom
+      09.10. laut Screenshots) entstanden in „Mosca IT - M365 General“,
+      unabhängig vom Space, auch nach `527105c`. Befund für `bmsptest`, kein
+      Beleg für `bmsp`; gehört als Zahl zu den offenen Punkten in 6.4.2.
+      Haller fragen, wo die Zuordnung konfiguriert ist; dieselbe Auswertung
+      lesend auf `bmsp` (mit RITM0049380). Falls `bmsptest` ein Klon von
+      `bmsp` ist, ist die Aussage „exakter Klon“ zu relativieren.
+      Prüf-SCTASK entsteht 1 s nach dem ersten Schließen des
+      Behebungs-SCTASK (0042574 → 0042575, 0042576 → 0042577).
+      **`closed_at` hält den ersten Abschluss:** SCTASK0042576 zeigt
+      10:01:06 UTC, obwohl er nach dem Wiederöffnen (10:03:56) nach der
+      Buchung um 10:05:12 erneut geschlossen wurde (endgültig zwischen
+      10:05:12 und 10:06:03). Für Nacharbeit und Phasendauern die
+      Änderungshistorie nutzen; die RITM-Dauer bleibt unberührt (schließt
+      einmal). Die Aufteilung „41 min Behebung / 5 min Prüfung“ für
+      RITM0043106 ist ein Messartefakt (wirksame Behebung rund 45–46 min,
+      reine Prüfung höchstens rund 1 min); das Beispiel nur als Demonstration
+      des Messproblems verwenden, nicht als Messwert (konstruierter Testlauf).
+      Das Skript liest seit 09.10. zusätzlich `closed_by` (RITM und SCTASK)
+      und die Statuswechsel aus `sys_audit` (`statuswechsel.csv`; je SCTASK
+      Rolle, Wiedereröffnungen, letzter Abschluss, offene Zeit); ob
+      `mosca.rest` `sys_audit` lesen darf, zeigt der nächste Lauf.
+      Offene Tests: T1 Schließen nach Reopen ohne neue Buchung (Feld 0 spricht
+      dafür, dass die Regel die Einträge prüft), T2 Prüf-SCTASK schließen,
+      während der Behebungs-SCTASK wieder offen ist, T3 Prüf-SCTASK auf
+      Closed Incomplete.
 - [ ] **Stand im App Service (09.10.):** Seit 08.10. nachmittags läuft der
       Stand `50af0d1` (SCTASKs mitschließen) gegen `bmsptest`; `bmsp` erhält
       derzeit keine Tickets. Davor lief der ältere Stand (RITM auf 3/7) gegen
