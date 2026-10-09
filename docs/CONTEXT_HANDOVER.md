@@ -861,10 +861,16 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
       `test_update_of_closed_case_without_ritm_orders_nothing`). Wichtig für
       den Livegang: Die offenen Test-Cases von `bmsptest` erzeugen sonst
       beim Schließen neue RITMs auf `bmsp`.
-      Offene Tests: T1 Schließen nach Reopen ohne neue Buchung (Feld 0 spricht
-      dafür, dass die Regel die Einträge prüft), T2 Prüf-SCTASK schließen,
-      während der Behebungs-SCTASK wieder offen ist, T3 Prüf-SCTASK auf
-      Closed Incomplete.
+      **T1 beantwortet (BEFUNDE B24, n = 1, Admin-Konto):** SCTASK0042574
+      wurde nach dem Wiederöffnen (09:12:23) ohne neue Buchung erneut
+      geschlossen; die Regel prüft also vermutlich die Summe (Variante S) oder
+      nimmt Administratoren aus. Das Skript der Regel klärt beides. Folge bei
+      Variante S: Nacharbeit wird nicht erzwungen gebucht (Limitation Kap. 6,
+      organisatorische Regel „nach dem Wiederöffnen neu buchen“). Offen: T2
+      (Prüf-SCTASK vor dem wiedereröffneten Behebungs-SCTASK schließen:
+      schließt das RITM schon?) und T3 (Prüf-SCTASK auf Closed Incomplete,
+      dann Behebungs-SCTASK wiedereröffnen und schließen: neuer
+      Prüf-SCTASK?).
 - [ ] **Stand im App Service (09.10.):** Seit 08.10. nachmittags läuft der
       Stand `50af0d1` (SCTASKs mitschließen) gegen `bmsptest`; `bmsp` erhält
       derzeit keine Tickets. Davor lief der ältere Stand (RITM auf 3/7) gegen
@@ -951,9 +957,8 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
       `bmsptest` landen. (3) Ziel auf `bmsp` (Instanz-URL und Katalog-sys_id,
       Konfigurationsänderung), Host im Log prüfen, Smoke-Test mit einem
       Ticket. Offene SCTASKs 0048988/0048989 auf `bmsp` von Hand schließen.
-- [ ] Befundtabelle für den Anhang: `docs/BEFUNDE.md` (B1–B23, je Instanz
-      getrennt, nur Beobachtetes). Bei B15 die Nummer des zweiten RITM
-      ergänzen. „Bearbeiter 1“ auf `bmsp` ist vermutlich ein Konto mit
+- [ ] Befundtabelle für den Anhang: `docs/BEFUNDE.md` (B1–B24, je Instanz
+      getrennt, nur Beobachtetes). „Bearbeiter 1“ auf `bmsp` ist vermutlich ein Konto mit
       Administratorrechten; Kap. 4.3.2 („Administratoren können das RITM
       nicht schließen“) mit einem Standardkonto testen oder als „Konzept,
       nicht getestet“ führen.
