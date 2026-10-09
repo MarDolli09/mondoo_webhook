@@ -518,7 +518,12 @@ beim Deployment sichtbar machen statt erst beim ersten Webhook.
 
 - **Keine Assets im Ticket.** Die Asset-Tabelle entfällt; nur die Anzahl wird
   übertragen. Damit entfallen auch die GraphQL-Abfragen nach Asset-Namen.
-- **Keine Assignment Group.** Setzt ServiceNow selbst.
+- **Keine Assignment Group.** Setzt ServiceNow selbst. **Vorgabe (09.10.):
+  Assignment Groups dürfen nicht überschrieben werden**, weder von der App
+  noch von Hand. Die App sendet `assignment_group` nie (Test prüft das) und
+  setzt den SCTASK-Titel erst, wenn der Workflow die Gruppe zugewiesen hat.
+  Das Umsetzen auf „Mosca IT“ in den Tests vom 09.10. (BEFUNDE B27) war
+  eine Testhandlung.
 - **End-of-Life** wird als eigener `finding_type` gemeldet, nicht als Advisory.
 - **`sysparm_requested_for`** wird nur bei gesetztem `SNOW_REQUESTED_FOR_SYS_ID`
   gesendet; sonst trägt ServiceNow den angemeldeten Benutzer ein.
@@ -956,9 +961,28 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
       abgleichen und schließen oder löschen, solange die Ereignisse noch auf
       `bmsptest` landen. (3) Ziel auf `bmsp` (Instanz-URL und Katalog-sys_id,
       Konfigurationsänderung), Host im Log prüfen, Smoke-Test mit einem
-      Ticket. Offene SCTASKs 0048988/0048989 auf `bmsp` von Hand schließen.
-- [ ] Befundtabelle für den Anhang: `docs/BEFUNDE.md` (B1–B24, je Instanz
-      getrennt, nur Beobachtetes). „Bearbeiter 1“ auf `bmsp` ist vermutlich ein Konto mit
+      Ticket. **Aufräumen auf `bmsp`:** SCTASK0048988/0048989 (LAN/WLAN) und
+      RITM0049375 mit SCTASK0048974 („Client General“, offenes Duplikat des
+      Test-Case von RITM0043081) mit Closed Skipped und Notiz schließen,
+      betroffene Gruppen informieren. Der Case von RITM0043081 ist noch offen
+      und sendet etwa alle 20 min ein Update; ohne Schritt 2 landet er beim
+      Umschalten wieder in der Produktion. Abnahmekriterium nach dem
+      Umschalten: kein aus `TYPE_UPDATED` angelegtes RITM zu einem Case, dessen
+      `createdAt` vor der Umschaltung liegt.
+- [ ] Befundtabelle für den Anhang: `docs/BEFUNDE.md` (B1–B33, je Instanz
+      getrennt, nur Beobachtetes). B25/B26 aus der Telemetrie (14-Tage-
+      Abfrage, 30.09. 12:13 – 09.10. 09:19 UTC): 71 RITMs aus `TYPE_CREATED`,
+      3 aus `TYPE_UPDATED` (RITM0049375, 0049383, 0049384, alle `bmsp`),
+      **alle drei Umschaltfälle, kein geheilter Verlust**. D14 damit: Vorsorge
+      ohne beobachteten Nutzen, Preis durch Cutover-Schritt 2 vermeidbar;
+      Alternative „nur `TYPE_CREATED` plus Abgleich“ als Ausblick Kap. 7.
+      Entscheidung weiter beim Nutzer. Je Update schreibt die App eine
+      Arbeitsnotiz (bei rund 20 min Abstand viele Notizen je RITM); Ereignisse
+      an geschlossenen RITMs werden verworfen (B31). Ergebnis als CSV
+      exportieren, bevor die Aufbewahrung des Workspace es löscht (Frist in
+      den Workspace-Einstellungen prüfen). Ausblick Kap. 7: regelmäßiger
+      Abgleich offener Cases gegen offene RITMs statt Zählen. D14 (Anlegen
+      bei `UPDATED`) gehört zusätzlich in die Verhaltenstabelle in 5.3.3. „Bearbeiter 1“ auf `bmsp` ist vermutlich ein Konto mit
       Administratorrechten; Kap. 4.3.2 („Administratoren können das RITM
       nicht schließen“) mit einem Standardkonto testen oder als „Konzept,
       nicht getestet“ führen.

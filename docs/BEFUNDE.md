@@ -14,7 +14,7 @@ Integrationstests, getrennt nach Instanz (Eigene Darstellung)*.
 |---|---|---|---|---|---|
 | B1 | Der Webhook nennt nicht, wer ein Ticket geschlossen hat; `createdBy` ist auch bei `TYPE_CLOSED` der Ersteller des Case. | Mondoo → Middleware | 30.09.–08.10.2026 | Telemetrie in Log Analytics; darunter RITM0043042, das Mondoo selbst geschlossen hat | 40 Cases |
 | B2 | Beim Schließen sendet Mondoo `TYPE_UPDATED` mit Status `CASE_CLOSED` und rund 2 s später `TYPE_CLOSED`. | Mondoo → Middleware | 09.10.2026 | App-Log 07:38:25 und 07:38:27 (Case `3KQ4MJgc…`, RITM0043103) | 1 |
-| B3 | Fehlte auf der Zielinstanz das RITM, legte die Middleware beim `UPDATED` ein neues an und schloss es beim `TYPE_CLOSED` wieder (Fehler, im Code behoben). | bmsp | 08.10.2026 | RITM0049383/0049384: angelegt 11:09:07/11:09:14, geschlossen 11:09:11/11:09:17, `closed_by` = `mosca.rest` | 2 |
+| B3 | Fehlte auf der Zielinstanz das RITM zu einem Case, legte die Middleware beim `TYPE_UPDATED` ein neues an; folgte `TYPE_CLOSED`, schloss sie es wieder. | bmsp | 08.10.2026 | RITM0049375 (angelegt 10:10:14, offen); RITM0049383/0049384 (angelegt 11:09:07/11:09:14, geschlossen 11:09:11/11:09:17, `closed_by` = `mosca.rest`) | 3 |
 | B4 | Nach einer Ausnahme mit Bereich „1 CVE“ (alle Assets im Space) schließt Mondoo das Ticket selbst, rund 11 min nach der Freigabe. | Mondoo, bmsptest | 30.09.2026 | `exception-3`, RITM0043042, `TYPE_CLOSED` 16:20:05 | 1 |
 | B5 | Nach Ausnahmen mit Bereich „1 CVE on 1 asset“ (Risk Accepted, False Positive) bleibt das Ticket offen, auch nach dem nächsten Scan; das Asset bleibt „Affected“. | Mondoo, bmsptest | 08.–09.10.2026 | `exception-5` (19:37), `exception-6` (21:31), Case `3KQ4MJgc…`, RITM0043103, Scan 20:53 | 1 Ticket |
 | B6 | Die Findings-Abfrage je Asset liefert vor der Ausnahme `OPEN 1`, danach `OPEN 0 / EXCEPTION 1`; der Space-Scope umfasst weitere Assets. | Mondoo-API | 08.10.2026 | `scripts/verify_open_findings.py`, CVE-2024-27025 auf zscalermuc01 | 1 |
@@ -31,11 +31,20 @@ Integrationstests, getrennt nach Instanz (Eigene Darstellung)*.
 | B17 | Mit dem Schließen des Prüf-SCTASK schließt „System“ in derselben Sekunde das RITM; der REQ meldet „Automatically Closed as all Line Items were complete“. | bmsptest | 09.10.2026 | RITM0043106, 10:06:04 (Screenshots) | 1 |
 | B18 | Jedes von der Middleware geschlossene RITM hinterlässt einen offenen SCTASK. | bmsptest | 01.–09.10.2026 | `closed_by` = `mosca.rest`: RITM0043045–0043073, 0043103, 0043104 | 27 von 27 |
 | B19 | Personen schließen RITMs auch bei offenem SCTASK bzw. vor den Tasks (Konto vermutlich mit Administratorrechten). | bmsp | 08.–09.10.2026 | RITM0049368 (SCTASK offen), RITM0049380 (vor den Tasks) | 2 |
-| B20 | Die Gruppe aus dem Space greift nicht: Alle Behebungs-SCTASKs entstehen in „Mosca IT - M365 General“. | bmsptest | 01.–09.10.2026 | `sctasks.csv` (54) und Screenshots vom 09.10. (2) | 56 von 56 |
+| B20 | Die Gruppe aus dem Space greift nicht: Alle Behebungs-SCTASKs entstehen in „Mosca IT - M365 General“. | bmsptest | 01.–09.10.2026 | `sctasks.csv` (54) und Screenshots vom 09.10. (2: SCTASK0042574 und 0042576 entstanden in „M365 General“ und wurden danach von Hand umgesetzt, siehe B27) | 56 von 56 |
 | B21 | Die Gruppe aus dem Space greift: Behebungs-SCTASKs in drei Fachgruppen, Prüf-SCTASKs in „Mosca IT - Security“. | bmsp | 08.10.2026 | `sctasks.csv` | 7 (+ 2 Prüf) |
 | B22 | Die Middleware setzt am RITM Impact „1 - High“; SCTASK und REQ bleiben auf Impact 3 / Priorität 4. | bmsptest | 09.10.2026 | RITM0043106 (Screenshots) | 1 |
 | B23 | `sys_audit` ist für `mosca.rest` nicht lesbar (HTTP 403). | bmsptest, bmsp | 09.10.2026 | `servicenow_time_report.py` | 2 Instanzen |
 | B24 | Nach dem Wiederöffnen ließ sich der SCTASK ohne neue Zeitbuchung erneut schließen (Konto mit Administratorrechten). | bmsptest | 09.10.2026 | SCTASK0042574: einzige Buchung 09:11:26 (5 min), geschlossen 09:11:41, wiedereröffnet 09:12:23 (Screenshot), heute Closed Complete (`sctasks.csv`, `zeitbuchungen.csv`) | 1 |
+| B25 | Von den RITMs, die die Middleware angelegt hat, entstanden 71 aus `TYPE_CREATED` und 3 aus `TYPE_UPDATED` (nachträglich angelegt). | Middleware (bmsptest und bmsp; Instanz nur über den Nummernkreis RITM0043… bzw. RITM0049…) | 30.09.2026 12:13 – 09.10.2026 09:19 | Telemetrie in Log Analytics, Abfrage über 14 Tage, `snow_action = created` je `mondoo_event`; Ergebnis exportieren | 74 |
+| B26 | Alle drei aus `TYPE_UPDATED` angelegten RITMs sind Umschaltfälle: Ihr Case hatte bereits ein RITM auf bmsptest. Ein nachgeholter Verlust wurde nicht beobachtet. | bmsp | 08.10.2026 10:10–11:09 | Telemetrie: RITM0049375 (Case angelegt 06.10. 09:24:20, RITM0043081 auf bmsptest 35 s später; nach der Umschaltung legte das erste Update um 10:10:14 das Duplikat an), RITM0049383/84 (Cases von RITM0043088/89) | 3 von 3 |
+| B27 | Im Test wurde die Gruppe von SCTASKs von Hand auf „Mosca IT“ gesetzt (Behebungs-SCTASKs zuvor „M365 General“, Prüf-SCTASK zuvor „Security“). | bmsptest | 09.10.2026 | Gruppe heute „Mosca IT“ (`sctasks.csv`) und Screenshots: SCTASK0042574, 0042576, 0042577 | 3 |
+| B28 | Alle SCTASKs tragen eine Fachgruppe bzw. „Mosca IT - Security“; ein Überschreiben ist nicht erkennbar (Historie nicht lesbar, B23). | bmsp | 08.–09.10.2026 | `sctasks.csv` | 9 |
+| B29 | Behebungs- und Prüf-SCTASK desselben RITM hat dasselbe Konto geschlossen. | bmsptest | 09.10.2026 | `sctasks.csv`, „Geschlossen von“ (Pseudonym je Lauf): RITM0043106 (SCTASK0042576, 0042577) | 1 |
+| B30 | Behebungs- und Prüf-SCTASK desselben RITM hat dasselbe Konto geschlossen. | bmsp | 08.10.2026 | `sctasks.csv`, „Geschlossen von“: RITM0049380 (SCTASK0048981, 0048987) | 1 |
+| B31 | Ereignisse an einem bereits geschlossenen RITM werden verworfen; es entsteht kein neues Ticket. | bmsp | 08.10.2026 | Telemetrie RITM0049380: `TYPE_UPDATED` 11:09:20 und `TYPE_CLOSED` 11:09:21, jeweils `skipped` | 1 (2 Ereignisse) |
+| B32 | `TYPE_UPDATED` trifft im Zehnminutenraster ein, 6,8 bis 14,0 s nach einer vollen Zehnminutenmarke; das `TYPE_CREATED` desselben Case kam 35 s nach dem Anlegen, außerhalb des Rasters. | Mondoo → Middleware | 06.–09.10.2026 | Telemetrie, Verlauf des Case von RITM0043081/0049375 (Auswertung 09.10.) | 57 Updates, 1 Case |
+| B33 | Ein offener Case erzeugte 57 `TYPE_UPDATED` (51 an bmsptest, 6 an bmsp), Median-Abstand rund 20 min. | Mondoo → Middleware | 06.–09.10.2026 | Telemetrie, Case von RITM0043081/0049375 (Auswertung 09.10.) | 1 Case |
 
 ## Deutungen (nicht als Befund verwenden)
 
@@ -47,16 +56,46 @@ Integrationstests, getrennt nach Instanz (Eigene Darstellung)*.
   Buchung.
 - Zu B20/B21: `bmsptest` ist bei der Gruppenzuordnung kein exakter Klon von
   `bmsp`.
-- Zu B24: Die Regel prüft vermutlich die Summe aller Buchungen, nicht die
-  Buchungen seit dem Wiederöffnen (Variante S). Gleich gut erklärt das eine
-  Ausnahme der Regel für Administratoren, denn getestet wurde mit einem
-  Administratorkonto. Klären lässt sich das über das Skript der Regel oder
-  einen Test mit einem Standardkonto. Folge, falls Variante S: Aufwand für
-  Nacharbeit wird nicht erzwungen erfasst, der Aufwand je Behebung kann bei
-  wiedereröffneten Tasks zu niedrig sein (Limitation in Kap. 6,
-  organisatorische Regel „Nacharbeit nach dem Wiederöffnen neu buchen“). Die
-  zweite Buchung bei SCTASK0042576 war eine Entscheidung im Test, keine
-  Vorgabe der Plattform.
+- Zu B24: Mindestens drei Erklärungen sind möglich: (a) Die Regel prüft die
+  Summe aller Buchungen (Variante S), (b) Administratoren sind ausgenommen,
+  (c) die Regel greift nur beim ersten Wechsel auf Closed Complete. Klären
+  lässt sich das über Bedingung und Skript der Regel (Screenshot von Haller)
+  oder einen Test mit einem Standardkonto. Unabhängig davon gilt: Zumindest
+  für Administratorkonten wird Nacharbeit nach dem Wiederöffnen nicht
+  erzwungen gebucht; der Aufwand je Behebung kann bei wiedereröffneten Tasks
+  zu niedrig sein (Limitation in Kap. 6, organisatorische Regel „Nacharbeit
+  nach dem Wiederöffnen neu buchen“ in Kap. 4.3.2). Die zweite Buchung bei
+  SCTASK0042576 war eine Entscheidung im Test, keine Vorgabe der Plattform.
+- Zu B3: Im Code behoben (noch nicht deployt) ist nur der Teil mit Status
+  `CASE_CLOSED` (RITM0049383/84). Das Anlegen bei `TYPE_UPDATED` für offene
+  Cases (RITM0049375) ist Verhalten (D14); dagegen hilft nur, die Test-Cases
+  vor dem Umschalten zu schließen.
+- Zu B25/B26: Die Zahl misst nur **nachträglich angelegte** Tickets
+  („durch Selbstheilung nachgezogen“), keine Zustellrate. Von 74 angelegten
+  RITMs zeigt kein einziger einen geheilten Verlust; alle drei Fälle sind
+  Schaden beim Umschalten. Ein verlorenes `TYPE_CREATED` ohne späteres
+  Update bliebe ohnehin unsichtbar; dafür braucht es einen Abgleich offener
+  Cases gegen offene RITMs (Ausblick Kap. 7). Abnahmekriterium für die
+  Umschaltung: Danach darf kein aus `TYPE_UPDATED` angelegtes RITM zu einem
+  Case erscheinen, dessen `createdAt` vor der Umschaltung liegt.
+- Zu B27/B28: Assignment Groups dürfen nicht überschrieben werden (Vorgabe,
+  09.10.). Das Umsetzen in B27 war eine Testhandlung und ist im Betrieb
+  nicht zulässig. Die Middleware setzt und überschreibt keine Assignment
+  Group (der Tickettitel wird erst gesetzt, wenn der Workflow die Gruppe
+  zugewiesen hat; ein Test prüft, dass `assignment_group` nie gesendet
+  wird).
+- Zu B29/B30: Die Funktionstrennung „Umsetzer ≠ Prüfer“ erzwingt die
+  Plattform nicht; sie ist nur organisatorisch über die Gruppen geregelt.
+  Getestet wurde mit einem Konto mit Administratorrechten. Pseudonyme gelten
+  je Lauf.
+- Zu B31: Die Suche nach dem RITM filtert nicht auf aktive Tickets. Ein vom
+  Workflow geschlossenes RITM wird gefunden, weitere Ereignisse seines Case
+  werden verworfen; Updates erzeugen also kein neues Ticket.
+- Zu B32/B33: Für die Übergabezeit in Kap. 6 zählt nur `TYPE_CREATED`, weil
+  Updates im Raster eintreffen. Jedes Update an einem offenen RITM schreibt
+  eine Arbeitsnotiz; bei rund 20 min Abstand entstehen viele Notizen je
+  Ticket. Die Selbstheilung hängt am nächsten Update; bei ruhigen Cases ist
+  ihre Latenz unbestimmt (Argument für den Abgleich als Ausblick).
 
 ## Nicht belegt oder offen
 
@@ -73,6 +112,10 @@ Integrationstests, getrennt nach Instanz (Eigene Darstellung)*.
   Prüf-SCTASK? Belegt den Pfad „Prüfung fehlgeschlagen, Nacharbeit“ aus
   Kap. 4.3.1.
 - (T1 ist mit B24 beantwortet, n = 1.)
+- RITM0043105: Aktivität und Zeitstempel des zweiten Schließens von
+  SCTASK0042574 (für B24).
+- Anzahl der Arbeitsnotizen an RITM0043081 (erwartet rund 51, eine je
+  Update; belegt B33 auf ServiceNow-Seite).
 - Regel „Administratoren können das RITM nicht schließen“ (Kap. 4.3.2): mit
   einem Administratorkonto nicht prüfbar; mit einem Standardkonto testen oder
   als „Konzept, nicht getestet“ führen.
@@ -80,5 +123,5 @@ Integrationstests, getrennt nach Instanz (Eigene Darstellung)*.
   ausgenommen: nicht beobachtet.
 - Wirkung einer Ausnahme „1 CVE“ auf künftige Assets: Annahme aus der
   Bedeutung des Bereichs, nicht beobachtet.
-- Variante B (Hinweis statt Abschluss) und der Fix zu B3 sind auf keiner
-  Instanz getestet.
+- Variante B (Hinweis statt Abschluss) und der Fix zu `CASE_CLOSED` (B3)
+  sind auf keiner Instanz getestet.
