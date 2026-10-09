@@ -337,6 +337,18 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.json()["action"], "skipped_closing_without_ritm")
         self.assertEqual(backends.find("servicenow", "POST", "/order_now"), [])
 
+    async def test_update_of_closed_case_without_ritm_orders_nothing(self) -> None:
+        # Mondoo sendet vor TYPE_CLOSED ein TYPE_UPDATED mit Status CASE_CLOSED;
+        # ohne RITM (z. B. nach Instanzwechsel) entstand daraus ein neues Ticket
+        payload = load_fixture("case_closed_misconfiguration.json")
+        payload["body"]["type"] = "TYPE_UPDATED"
+        backends = FakeBackends()
+
+        (response,) = await post_webhooks(backends, [payload])
+
+        self.assertEqual(response.json()["action"], "skipped_closing_without_ritm")
+        self.assertEqual(backends.find("servicenow", "POST", "/order_now"), [])
+
     async def test_token_and_user_lookups_are_shared_between_requests(self) -> None:
         first = load_fixture("case_created_vulnerability.json")
         second = copy.deepcopy(first)

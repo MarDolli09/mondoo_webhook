@@ -7,7 +7,7 @@ from app.core.exceptions import ServiceNowAPIError
 from app.core.logging import logger
 from app.domain.ports import SyncAction, SyncOutcome, TicketSynchronizer
 from app.models.case import NormalizedCase
-from app.models.mondoo import CLOSING_EVENTS
+from app.models.mondoo import CASE_STATUS_CLOSED, CLOSING_EVENTS
 from app.services.servicenow.api import ServiceNowAPI
 from app.services.servicenow.config import ServiceNowConfig
 from app.services.servicenow.constants import (
@@ -43,9 +43,15 @@ class ServiceNowClient(TicketSynchronizer):
         )
 
         if existing is None:
-            if case.event_type in CLOSING_EVENTS:
+            # Beim Schliessen sendet Mondoo erst TYPE_UPDATED mit Status
+            # CASE_CLOSED, dann TYPE_CLOSED; beides darf kein Ticket anlegen.
+            if (
+                case.event_type in CLOSING_EVENTS
+                or case.case_status == CASE_STATUS_CLOSED
+            ):
                 logger.info(
-                    f"Ereignis '{case.raw_event_type}' ohne bestehendes RITM. "
+                    f"Ereignis '{case.raw_event_type}' (Status "
+                    f"'{case.case_status or '-'}') ohne bestehendes RITM. "
                     f"Es wird kein Ticket angelegt."
                 )
                 return SyncOutcome(SyncAction.SKIPPED_CLOSING_WITHOUT_TICKET)

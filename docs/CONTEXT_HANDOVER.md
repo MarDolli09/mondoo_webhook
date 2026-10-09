@@ -522,6 +522,15 @@ beim Deployment sichtbar machen statt erst beim ersten Webhook.
 - **End-of-Life** wird als eigener `finding_type` gemeldet, nicht als Advisory.
 - **`sysparm_requested_for`** wird nur bei gesetztem `SNOW_REQUESTED_FOR_SYS_ID`
   gesendet; sonst trägt ServiceNow den angemeldeten Benutzer ein.
+- **Anlegen auch bei `TYPE_UPDATED` ohne RITM (Selbstheilung, bisher nur
+  implizit; Entscheidung offen, Empfehlung: beibehalten).** Ging ein
+  `TYPE_CREATED` verloren (z. B. Zustellungen während der Störung am 08.10.
+  ohne RITM), legt das nächste Update das Ticket an. Preis: das
+  Umschaltrisiko. Nach einem Instanzwechsel erzeugt jedes Update eines Case,
+  dessen RITM auf der alten Instanz liegt, ein neues RITM mit echten Tasks
+  in Fachgruppen (betrifft bis zu 28 offene Test-Cases von `bmsptest`).
+  Gegenmaßnahme: Test-Cases vor dem Umschalten schließen oder löschen; seit
+  09.10. legt ein Case mit Status `CASE_CLOSED` nie ein Ticket an.
 - **Kein Wiedereinspielschutz über `webhook-id`.** Retries behalten laut
   Spezifikation dieselbe ID; das Zeitfenster von 5 Minuten genügt, da die
   Synchronisierung über die `correlation_id` ohnehin idempotent ist.
@@ -792,8 +801,8 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
       dort einen Wert hat (sonst keine Aufsummierung). **Offene Tasks:** 27
       von 28 geschlossenen RITMs haben einen offenen SCTASK (Testbestand
       `bmsptest`, alle außer RITM0043106). Dass die App sie geschlossen hat,
-      ist noch nicht belegt (Spalte „Geschlossen von“ fehlte); die Zeitpunkte
-      decken sich aber mit `TYPE_CLOSED`-Ereignissen der Telemetrie (01.10.
+      belegt seit dem zweiten Lauf `closed_by` (siehe unten); die Zeitpunkte
+      decken sich zudem mit `TYPE_CLOSED`-Ereignissen der Telemetrie (01.10.
       08:40, 02.10. 09:04–09:05). Als Argument für Variante B zählt der
       Mechanismus (HTTP 403 durch die Regel) mehr als die Zahl.
       **Routing:** 56 von 56 Behebungs-SCTASKs (01.10.–09.10., die zwei vom
@@ -816,8 +825,42 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
       des Messproblems verwenden, nicht als Messwert (konstruierter Testlauf).
       Das Skript liest seit 09.10. zusätzlich `closed_by` (RITM und SCTASK)
       und die Statuswechsel aus `sys_audit` (`statuswechsel.csv`; je SCTASK
-      Rolle, Wiedereröffnungen, letzter Abschluss, offene Zeit); ob
-      `mosca.rest` `sys_audit` lesen darf, zeigt der nächste Lauf.
+      Rolle, Wiedereröffnungen, letzter Abschluss, offene Zeit). **Lauf
+      09.10.:** `sys_audit` ist für `mosca.rest` auf `bmsptest` und `bmsp`
+      nicht lesbar (HTTP 403), die Statushistorie fehlt also. `bmsptest`: 56
+      RITMs, 58 SCTASKs, 4 Zeiteinträge. **`bmsp`** (Aufruf mit
+      überschriebener Instanz und Katalog-sys_id `a2bf7e3a…`, ab 01.10.): 7
+      RITMs, 9 SCTASKs, 3 Zeiteinträge. Für die Historie entweder ein auf
+      `sc_task`/`sc_req_item`, Feld `state`, begrenztes Leserecht auf
+      `sys_audit` oder ein einmaliger CSV-Export dieser Einträge durch den
+      Admin (Haller).
+      **Befund „Geschlossen von“ (`bmsptest`):** Alle 27 RITMs mit offenem
+      SCTASK hat die Middleware geschlossen (`closed_by` = `mosca.rest`);
+      damit ist die Zuordnung belegt: 27 von 27 durch die App geschlossenen
+      RITMs hinterlassen einen offenen SCTASK. RITM0043106 (Abschluss über
+      den Workflow) hat kein `closed_by`.
+      **Befund `bmsp`:** Routing nach Space greift dort (Gruppen „Client
+      General“, „Infrastructure Server & Storage“, „Infrastructure Internal
+      Network (LAN / WLAN)“, Prüf-SCTASK in „Security“), anders als auf
+      `bmsptest`; „exakter Klon“ also relativieren. Prüf-SCTASK entsteht 2 s
+      nach dem Behebungs-SCTASK (0048981 → 0048987, 0048990 → 0048991).
+      RITM0049380 hat eine Person um 11:05:45 geschlossen, **vor** den Tasks;
+      der Prüf-SCTASK entstand um 11:08:08 trotzdem: Der Workflow prüft den
+      RITM-Status nicht (1 Fall). RITM0049368 hat eine Person am 09.10. bei
+      offenem SCTASK geschlossen (offene Tasks entstehen also auch von Hand).
+      Buchungen liegen jeweils Sekunden vor dem Schließen (Regel). Pseudonyme
+      gelten je Lauf, „Bearbeiter 1“ ist zwischen den Instanzen nicht
+      dieselbe Person.
+      **Fehler gefunden und behoben (09.10., noch nicht deployt):** Mondoo
+      sendet beim Schließen erst `TYPE_UPDATED` mit Status `CASE_CLOSED`, dann
+      `TYPE_CLOSED`. Gab es auf der Zielinstanz kein RITM (Instanzwechsel),
+      bestellte die App beim `UPDATED` ein neues: RITM0049383/84 auf `bmsp`
+      (11:09:07/14 angelegt, 11:09:11/17 geschlossen; Cases von RITM0043088/89
+      auf `bmsptest`). Unter Variante B blieben solche RITMs offen. Jetzt
+      legt auch ein Ereignis mit Status `CASE_CLOSED` kein Ticket an (Test
+      `test_update_of_closed_case_without_ritm_orders_nothing`). Wichtig für
+      den Livegang: Die offenen Test-Cases von `bmsptest` erzeugen sonst
+      beim Schließen neue RITMs auf `bmsp`.
       Offene Tests: T1 Schließen nach Reopen ohne neue Buchung (Feld 0 spricht
       dafür, dass die Regel die Einträge prüft), T2 Prüf-SCTASK schließen,
       während der Behebungs-SCTASK wieder offen ist, T3 Prüf-SCTASK auf
@@ -825,8 +868,12 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
 - [ ] **Stand im App Service (09.10.):** Seit 08.10. nachmittags läuft der
       Stand `50af0d1` (SCTASKs mitschließen) gegen `bmsptest`; `bmsp` erhält
       derzeit keine Tickets. Davor lief der ältere Stand (RITM auf 3/7) gegen
-      `bmsp`; RITM0049380 (08.10., 11:09) ist so geschlossen worden, sein
-      SCTASK ist vermutlich offen geblieben (prüfen und von Hand schließen).
+      `bmsp`. Korrektur 09.10.: RITM0049380 hat nicht die App geschlossen,
+      sondern eine Person um 11:05:45 UTC; beide SCTASKs sind geschlossen.
+      Die App hat auf `bmsp` RITM0049383 und RITM0049384 angelegt und
+      sofort geschlossen (siehe Abschnitt „Zeitbuchungen“ unten); deren
+      SCTASKs 0048988/0048989 in „Infrastructure Internal Network (LAN /
+      WLAN)“ sind offen und von Hand zu schließen.
 - [ ] Zurückgestellt (nach dem Freeze): Bei `TYPE_CLOSED` per GraphQL prüfen,
       ob noch offene, nicht ausgenommene Findings bestehen. Mit Variante B
       schließt die App nichts mehr; die Prüfung würde nur noch den Hinweis
@@ -897,6 +944,19 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
       Punkt (2) ist bereits geklärt: Das Schließen des Behebungs-SCTASK legt
       den Prüf-SCTASK an (getestet). **Die App kann SCTASKs also nicht
       schließen;** daraus folgt Variante B (Abschnitt 5).
+- [ ] **Reihenfolge für die Umstellung auf `bmsp`:** (1) Variante B und den
+      Fix zu `CASE_CLOSED` deployen, Ziel noch `bmsptest`; T1–T3 abschließen.
+      (2) Offene Test-Cases in Mondoo mit den offenen RITMs auf `bmsptest`
+      abgleichen und schließen oder löschen, solange die Ereignisse noch auf
+      `bmsptest` landen. (3) Ziel auf `bmsp` (Instanz-URL und Katalog-sys_id,
+      Konfigurationsänderung), Host im Log prüfen, Smoke-Test mit einem
+      Ticket. Offene SCTASKs 0048988/0048989 auf `bmsp` von Hand schließen.
+- [ ] Befundtabelle für den Anhang: `docs/BEFUNDE.md` (B1–B23, je Instanz
+      getrennt, nur Beobachtetes). Bei B15 die Nummer des zweiten RITM
+      ergänzen. „Bearbeiter 1“ auf `bmsp` ist vermutlich ein Konto mit
+      Administratorrechten; Kap. 4.3.2 („Administratoren können das RITM
+      nicht schließen“) mit einem Standardkonto testen oder als „Konzept,
+      nicht getestet“ führen.
 - [ ] Variante B auf `bmsptest` prüfen: Testticket von Hand in Mondoo
       schließen. Erwartet: RITM bleibt offen, Hinweis am RITM und am offenen
       SCTASK, kein 403, keine Alarm-Mail.
