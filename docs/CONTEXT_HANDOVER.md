@@ -768,7 +768,39 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
       `scripts/servicenow_time_report.py` in Kudu ausführen (nur lesend;
       braucht Leserecht von `mosca.rest` auf `task_time_worked`, Feldnamen
       mit Haller bestätigen). Ohne Leserecht: CSV-Export der Liste „Time
-      Worked“ aus der Oberfläche.
+      Worked“ aus der Oberfläche. **Erster Lauf 09.10. auf `bmsptest`
+      (`--seit 2026-10-01`):** 56 RITMs, 58 SCTASKs, 4 Zeiteinträge;
+      `mosca.rest` kann `task_time_worked` also lesen. Feldnamen anhand der
+      CSV prüfen (Minuten und Erfasser gefüllt?). Für Prod-Zahlen nach der
+      Rückstellung auf `bmsp` erneut ausführen. Übertragung nach Kudu:
+      Heredoc zu lang, deshalb gzip+Base64 in sechs Teilen.
+      **Befund `ritms.csv`:** Feld `time_worked` am RITM ist bei allen 56
+      RITMs 0, auch bei RITM0043105 (Einträge 5 min) und RITM0043106 (20 min).
+      Die Buchungen werden also nicht in das RITM-Feld aufsummiert, oder
+      `mosca.rest` darf das Feld nicht lesen (im Formular von RITM0043106
+      prüfen). Für Kap. 6 zählt die Summe der `task_time_worked`-Einträge.
+      Durchlaufzeiten auf `bmsptest` sind Testdaten (Sammelabschlüsse 01.10.
+      08:40 und 02.10. 09:04; 27 RITMs der Serie vom 06.10. noch offen, weil
+      ihre Abschlüsse liefen, als die App auf `bmsp` zeigte). Einziger
+      vollständiger Durchlauf: RITM0043106, 0,77 h, 2 SCTASKs, 20 min
+      gebucht. RITM0043104 (08.10., 20:00–20:34) hat der Stand `50af0d1`
+      geschlossen; sein SCTASK ist vermutlich offen geblieben.
+      **Befund `sctasks.csv`/`zeitbuchungen.csv`:** Feldnamen stimmen
+      (Erfasser und Minuten gefüllt). Feld `time_worked` ist auch an allen
+      SCTASKs 0, trotz Einträgen (0042574: 5 min, 0042576: 5+5 min,
+      0042577: 10 min); im Formular von SCTASK0042576 prüfen, ob das Feld
+      dort einen Wert hat (sonst keine Aufsummierung). **Leichen belegt:**
+      27 von 28 RITMs mit Closed Complete haben einen offenen SCTASK (alle
+      außer RITM0043106), entstanden durch den RITM-Abschluss der App.
+      **Routing:** Alle 54 Behebungs-SCTASKs vom 01.10. bis 08.10. liegen in
+      „Mosca IT - M365 General“, unabhängig vom Space, auch nach dem Fix
+      `527105c` (z. B. RITM0043097 VMware, RITM0043103 Server); die
+      Zuordnung aus `mondoo_space` greift auf `bmsptest` nicht, Ursache mit
+      dem Admin klären. Prüf-SCTASK entsteht 1 s nach dem Behebungs-SCTASK
+      (0042574 → 0042575 und 0042576 → 0042577), Gruppe „Mosca IT -
+      Security“. `closed_at` von SCTASK0042576 zeigt 10:01:06 UTC, obwohl er
+      nach dem Wiederöffnen (10:03:56) erneut geschlossen wurde: `closed_at`
+      hält offenbar den ersten Abschluss; für Nacharbeit die Historie nutzen.
 - [ ] **Stand im App Service (09.10.):** Seit 08.10. nachmittags läuft der
       Stand `50af0d1` (SCTASKs mitschließen) gegen `bmsptest`; `bmsp` erhält
       derzeit keine Tickets. Davor lief der ältere Stand (RITM auf 3/7) gegen
