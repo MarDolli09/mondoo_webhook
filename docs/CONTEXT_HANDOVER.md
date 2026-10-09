@@ -426,6 +426,25 @@ nicht „Mission-Critical".
   Schließen des Behebungs-SCTASK würde einen Prüf-SCTASK erzeugen.
   Vorgeschichte: Bis 08.10. setzte die App das RITM auf 3/7 (Leichen), die
   Fassung „SCTASKs mitschließen“ (`50af0d1`) scheiterte an der Regel.
+  **Beobachtet auf `bmsptest`, 09.10., RITM0043106 (Auswertung von 12
+  Screenshots durch den Nutzer):** Anfangs nur ein SCTASK. Behebungs-SCTASK
+  0042576 um 12:01:06 geschlossen, Prüf-SCTASK 0042577 entsteht 12:01:07 in
+  „Mosca IT - Security“. Wiederöffnen geschieht **von Hand** (Status Open,
+  12:03:56, mit Arbeitsnotiz), nicht durch den Workflow; der Prüf-SCTASK
+  bleibt dabei Open, nach dem zweiten Schließen entsteht kein zweiter
+  (jetzt an zwei RITMs beobachtet). Prüf-SCTASK um 12:06:04 geschlossen, in
+  derselben Sekunde schließt „System“ das RITM, der REQ meldet
+  „Automatically Closed as all Line Items were complete“; ob der Prüf-SCTASK
+  oder „alle Tasks geschlossen“ auslöst, ist offen (Test T2). Beide Tasks hat
+  dieselbe Person übernommen und geschlossen: Funktionstrennung nur
+  organisatorisch über die Gruppen, technisch nicht erzwungen. Impact am
+  RITM „1 - High“ (Middleware), SCTASK und REQ bleiben auf Impact 3 /
+  Priorität 4. Der Behebungs-SCTASK ging direkt von Open auf Closed
+  Complete; dass das RITM bei Übernahme automatisch auf „Work in Progress“
+  wechselt (Kap. 4.3.1), ist damit **nicht belegt** (Test: SCTASK auf Work in
+  Progress setzen, RITM-Status ansehen). Gebuchte Zeiten: Beleg über
+  `task_time_worked` (Related List „Time Worked“) bzw. Feld „Time worked“,
+  nicht über das Performance-Analytics-Dashboard.
   **Wer geschlossen hat, steht nicht im Webhook (geprüft 08.10.):**
   `createdBy` ist auch bei `TYPE_CLOSED` der Ersteller des Case, nicht der
   Auslöser. Telemetrie 30.09.–08.10.: Bei allen 40 geschlossenen Cases mit beiden
@@ -742,9 +761,14 @@ Pro Störung kommt eine Mail („ausgelöst" und „behoben"), nicht pro Fehler.
 - [x] SCTASKs bei `TYPE_CLOSED` mitschließen (`50af0d1`, 08.10.) – auf
       `bmsptest` an der Geschäftsregel „MSC - Book task time to close“
       gescheitert, ersetzt durch **Variante B (09.10.): App schließt nichts,
-      Hinweis an RITM und offene SCTASKs.** B ist umgesetzt und getestet
-      (70 Tests), aber noch nicht committet und deployt; vor dem Freeze nach
-      Prod (Instanz-URL und Katalog-sys_id zurück auf `bmsp`).
+      Hinweis an RITM und offene SCTASKs.** B ist committet (`1a7d7ec`, 70
+      Tests), aber noch nicht deployt; vor dem Freeze nach Prod (Instanz-URL
+      und Katalog-sys_id zurück auf `bmsp`).
+- [ ] Zeitbuchungen und Durchlaufzeiten für Kap. 6:
+      `scripts/servicenow_time_report.py` in Kudu ausführen (nur lesend;
+      braucht Leserecht von `mosca.rest` auf `task_time_worked`, Feldnamen
+      mit Haller bestätigen). Ohne Leserecht: CSV-Export der Liste „Time
+      Worked“ aus der Oberfläche.
 - [ ] **Stand im App Service (09.10.):** Seit 08.10. nachmittags läuft der
       Stand `50af0d1` (SCTASKs mitschließen) gegen `bmsptest`; `bmsp` erhält
       derzeit keine Tickets. Davor lief der ältere Stand (RITM auf 3/7) gegen

@@ -1,13 +1,15 @@
 # Hilfsskripte
 
-Einmalige Prüfskripte gegen die Mondoo GraphQL-API. Sie gehören nicht zur
-Anwendung und werden von ihr nicht importiert; sie brauchen nur die
-Standardbibliothek und den API-Key in der Umgebung.
+Einmalige Prüf- und Auswertungsskripte gegen die Mondoo GraphQL-API und die
+ServiceNow Table API (nur lesend). Sie gehören nicht zur Anwendung und werden
+von ihr nicht importiert; sie brauchen nur die Standardbibliothek und die
+Zugangsdaten der App in der Umgebung.
 
 | Skript | Zweck |
 |---|---|
 | `verify_scores.py` | Führt die Abfrage aus `app/services/mondoo/queries.py` gegen die echte API aus und zeigt, welche Werte im Ticket landen würden. |
 | `introspect_next.py` | Introspektion: welche weiteren Daten die API liefern kann (Space-Name, Benutzer zur `createdBy`-MRN, `mrns`-Sammelfilter, EPSS, Risk-Faktoren). |
+| `servicenow_time_report.py` | Liest (nur lesend, Table API) die RITMs des Katalog-Items, ihre SCTASKs und die Zeiteinträge aus `task_time_worked` und schreibt `ritms.csv`, `sctasks.csv`, `zeitbuchungen.csv` (Durchlaufzeiten aus `opened_at`/`closed_at`, Feld `time_worked` und Summe der Einträge je SCTASK und RITM). Erfasser pseudonymisiert, `--namen` für Klarnamen. Braucht die ServiceNow-Einstellungen der App; in Kudu z. B. `python3 servicenow_time_report.py --ziel /home/data/zeiten --seit 2026-10-01`, Download über `https://<app>.scm.azurewebsites.net/api/vfs/data/zeiten/ritms.csv`, danach `rm -r /home/data/zeiten`. |
 | `verify_open_findings.py` | Zählt je Asset-Scope die Knoten eines Findings für die Zustände OPEN, CLOSED, EXCEPTION und ALL. Grundlage der geplanten Prüfung bei `TYPE_CLOSED`, ob noch offene, nicht ausgenommene Findings bestehen. |
 
 ## Ausführen
