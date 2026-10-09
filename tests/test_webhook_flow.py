@@ -233,7 +233,7 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn('HTTP 422: Fields "cvss" conflict', log)
         self.assertEqual(log.count("conflict because"), 1)
 
-    async def test_closed_event_closes_open_ritm(self) -> None:
+    async def test_closed_event_notes_ritm_without_closing_it(self) -> None:
         payload = load_fixture("case_closed_misconfiguration.json")
         mrn = payload["body"]["case"]["mrn"]
         open_ritm = {"sys_id": "ritm-1", "number": "RITM0000042", "state": "1"}
@@ -243,8 +243,10 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.json()["action"], "updated")
         (patch,) = backends.find("servicenow", "PATCH", "/sc_req_item/ritm-1")
-        self.assertEqual(patch.body["state"], "3")
-        self.assertTrue(patch.body["work_notes"].endswith("| Betroffene Assets: 5"))
+        # Abschluss nur ueber Tasks mit Zeitbuchung und den Workflow
+        self.assertNotIn("state", patch.body)
+        self.assertIn("| Betroffene Assets: 5\n", patch.body["work_notes"])
+        self.assertIn("Mondoo hat das Ticket geschlossen", patch.body["work_notes"])
         self.assertNotIn("assignment_group", patch.body)
         # Auch Fehlkonfigurationen werden abgefragt, gefiltert auf die Finding-MRN
         (lookup,) = [r for r in backends.requests if r.service == "mondoo"]
@@ -256,52 +258,42 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
             lookup.body["variables"]["scopeMrn"], payload["body"]["case"]["ownerMrn"]
         )
 
-    async def test_closed_event_closes_open_catalog_tasks(self) -> None:
-        payload = load_fixture("case_closed_misconfiguration.json")
-        mrn = payload["body"]["case"]["mrn"]
-        open_ritm = {"sys_id": "ritm-1", "number": "RITM0000042", "state": "1"}
-        backends = FakeBackends(ritms_by_correlation_id={mrn: [open_ritm]})
-        backends.catalog_tasks.append(
-            {"sys_id": "task-2", "number": "SCTASK0100002", "active": "false"}
-        )
+    async def test_closing_events_note_open_catalog_tasks(self) -> None:
+        expected = {
+            "TYPE_CLOSED": "Mondoo hat das Ticket geschlossen",
+            "TYPE_DELETED": "Das zugehoerige Mondoo-Ticket wurde geloescht",
+        }
+        for event_type, note_start in expected.items():
+            with self.subTest(event_type):
+                payload = load_fixture("case_closed_misconfiguration.json")
+                payload["body"]["type"] = event_type
+                mrn = payload["body"]["case"]["mrn"]
+                open_ritm = {"sys_id": "ritm-1", "number": "RITM0000042", "state": "1"}
+                backends = FakeBackends(ritms_by_correlation_id={mrn: [open_ritm]})
+                backends.catalog_tasks.append(
+                    {"sys_id": "task-2", "number": "SCTASK0100002", "active": "false"}
+                )
 
-        (response,) = await post_webhooks(backends, [payload])
+                (response,) = await post_webhooks(backends, [payload])
 
-        self.assertEqual(response.json()["action"], "updated")
-        (lookup,) = backends.find("servicenow", "GET", "/sc_task")
-        self.assertEqual(
-            lookup.params["sysparm_query"], "request_item=ritm-1^active=true"
-        )
-        # Nur der offene Task wird geschlossen, und erst nach dem RITM
-        (task_patch,) = backends.find("servicenow", "PATCH", "/sc_task/")
-        self.assertTrue(task_patch.path.endswith("/task-1"))
-        self.assertEqual(
-            task_patch.body,
-            {
-                "state": "3",
-                "work_notes": "Verifikation durch Mondoo-Scan",
-                "close_notes": "Verifikation durch Mondoo-Scan",
-            },
-        )
-        patches = [r for r in backends.requests if r.method == "PATCH"]
-        self.assertTrue(patches[0].path.endswith("/sc_req_item/ritm-1"))
+                self.assertEqual(response.json()["action"], "updated")
+                (ritm_patch,) = backends.find("servicenow", "PATCH", "/sc_req_item/")
+                self.assertNotIn("state", ritm_patch.body)
+                (lookup,) = backends.find("servicenow", "GET", "/sc_task")
+                self.assertEqual(
+                    lookup.params["sysparm_query"], "request_item=ritm-1^active=true"
+                )
+                # Nur der offene Task erhaelt den Hinweis; geschlossen wird er
+                # nicht, das verlangt eine Zeitbuchung
+                (task_patch,) = backends.find("servicenow", "PATCH", "/sc_task/")
+                self.assertTrue(task_patch.path.endswith("/task-1"))
+                self.assertEqual(list(task_patch.body), ["work_notes"])
+                self.assertTrue(task_patch.body["work_notes"].startswith(note_start))
+                self.assertIn(
+                    task_patch.body["work_notes"], ritm_patch.body["work_notes"]
+                )
 
-    async def test_deleted_event_leaves_catalog_tasks_open(self) -> None:
-        payload = load_fixture("case_closed_misconfiguration.json")
-        payload["body"]["type"] = "TYPE_DELETED"
-        mrn = payload["body"]["case"]["mrn"]
-        open_ritm = {"sys_id": "ritm-1", "number": "RITM0000042", "state": "1"}
-        backends = FakeBackends(ritms_by_correlation_id={mrn: [open_ritm]})
-
-        (response,) = await post_webhooks(backends, [payload])
-
-        self.assertEqual(response.json()["action"], "updated")
-        (patch,) = backends.find("servicenow", "PATCH", "/sc_req_item/ritm-1")
-        self.assertEqual(patch.body["state"], "7")
-        self.assertEqual(backends.find("servicenow", "GET", "/sc_task"), [])
-        self.assertEqual(backends.find("servicenow", "PATCH", "/sc_task/"), [])
-
-    async def test_catalog_task_errors_do_not_block_closing_the_ritm(self) -> None:
+    async def test_catalog_task_errors_do_not_fail_closing_events(self) -> None:
         payload = load_fixture("case_closed_misconfiguration.json")
         mrn = payload["body"]["case"]["mrn"]
         open_ritm = {"sys_id": "ritm-1", "number": "RITM0000042", "state": "1"}
@@ -319,10 +311,8 @@ class WebhookFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["action"], "updated")
         (patch,) = backends.find("servicenow", "PATCH", "/sc_req_item/ritm-1")
-        self.assertEqual(patch.body["state"], "3")
-        self.assertTrue(
-            any("von Hand geschlossen werden" in m for m in captured.output)
-        )
+        self.assertIn("Mondoo hat das Ticket geschlossen", patch.body["work_notes"])
+        self.assertTrue(any("Er steht am RITM" in m for m in captured.output))
 
     async def test_end_of_life_is_reported_as_own_type(self) -> None:
         payload = load_fixture("case_created_vulnerability.json")

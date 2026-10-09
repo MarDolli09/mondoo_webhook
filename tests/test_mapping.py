@@ -131,9 +131,14 @@ class TaskFieldsTest(unittest.TestCase):
             priority_source="default",
         )
         body = mapping.build_update_fields(case)
-        self.assertTrue(body["work_notes"].endswith("| Betroffene Assets: 4"))
+        self.assertIn("| Betroffene Assets: 4\n", body["work_notes"])
+        self.assertTrue(
+            body["work_notes"].endswith("bevor der Vorgang abgeschlossen wird.")
+        )
         self.assertNotIn("urgency", body)
-        self.assertEqual(body["state"], "7")
+        # Abschluss nur ueber Tasks mit Zeitbuchung und den Workflow
+        self.assertNotIn("state", body)
+        self.assertNotIn("close_notes", body)
 
     def test_watchers_add_mapped_human_creator(self) -> None:
         watchers = mapping.watcher_identifiers(make_case(), USER_NAMES)

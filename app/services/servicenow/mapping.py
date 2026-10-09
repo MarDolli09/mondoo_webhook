@@ -17,16 +17,14 @@ from app.services.servicenow.constants import (
     CORRELATION_ID_MAX,
     FIXED_WATCHERS,
     SHORT_DESCRIPTION_MAX,
-    STATE_CLOSED_COMPLETE,
-    STATE_CLOSED_SKIPPED,
     STATE_OPEN,
 )
 
 __all__ = [
     "build_catalog_variables",
     "build_create_fields",
-    "build_task_closing_fields",
     "build_update_fields",
+    "closing_note",
     "correlation_id",
     "creator_display_name",
     "space_choice",
@@ -35,7 +33,6 @@ __all__ = [
 ]
 
 TICKET_TITLE_PREFIX = "Mondoo - "
-TASK_VERIFIED_NOTE = "Verifikation durch Mondoo-Scan"
 ELLIPSIS = "…"
 WATCH_LIST_SEPARATOR = ","
 
@@ -160,14 +157,20 @@ def build_create_fields(
 
 
 def build_update_fields(case: NormalizedCase) -> dict[str, Any]:
-    """RITM-Felder fuer ein Folgeereignis, inklusive Abschluss bei Close/Delete."""
-    body: dict[str, Any] = {
-        "work_notes": (
-            f"Mondoo-Update ({case.raw_event_type}) vom {case.updated_at}\n"
-            f"CVSS: {case.cvss_score or '-'} ({case.cvss_rating or '-'}) | "
-            f"Betroffene Assets: {case.assets_count}"
-        ),
-    }
+    """RITM-Felder fuer ein Folgeereignis; bei Close/Delete mit Hinweis.
+
+    Der Status bleibt unveraendert: Tasks schliessen nur Bearbeiter mit
+    Zeitbuchung, das RITM schliesst der Workflow nach dem Pruef-SCTASK.
+    """
+    work_notes = (
+        f"Mondoo-Update ({case.raw_event_type}) vom {case.updated_at}\n"
+        f"CVSS: {case.cvss_score or '-'} ({case.cvss_rating or '-'}) | "
+        f"Betroffene Assets: {case.assets_count}"
+    )
+    note = closing_note(case.event_type)
+    if note:
+        work_notes = f"{work_notes}\n{note}"
+    body: dict[str, Any] = {"work_notes": work_notes}
 
     if case.priority_source is not PrioritySource.DEFAULT:
         body["urgency"] = case.urgency
@@ -177,45 +180,24 @@ def build_update_fields(case: NormalizedCase) -> dict[str, Any]:
             "Prioritaet nicht ermittelbar (Quelle 'default'). urgency/impact "
             "bleiben unveraendert."
         )
-
-    body.update(_closing_fields(case.event_type))
     return body
 
 
-def _closing_fields(event_type: MondooEventType) -> dict[str, Any]:
+def closing_note(event_type: MondooEventType) -> Optional[str]:
+    """Hinweis an RITM und offene SCTASKs, wenn Mondoo das Ticket beendet."""
     if event_type is MondooEventType.CLOSED:
-        return {
-            "state": STATE_CLOSED_COMPLETE,
-            "close_notes": (
-                "Automatisierter Abschluss: Das zugehoerige Mondoo-Ticket wurde "
-                "geschlossen. Der Befund gilt als behoben oder es wurde eine "
-                "formale Ausnahme genehmigt."
-            ),
-        }
+        return (
+            "Mondoo hat das Ticket geschlossen: Befund behoben oder per Ausnahme "
+            "erledigt. Bitte Zeit buchen und den offenen SCTASK schliessen; das "
+            "RITM schliesst der Workflow nach dem Pruef-SCTASK."
+        )
     if event_type is MondooEventType.DELETED:
-        return {
-            "state": STATE_CLOSED_SKIPPED,
-            "close_notes": (
-                "Das zugehoerige Mondoo-Ticket wurde geloescht. Der Befund wurde "
-                "nicht nachweislich behoben. Bitte fachlich pruefen, bevor der "
-                "Vorgang endgueltig abgelegt wird."
-            ),
-        }
-    return {}
-
-
-def build_task_closing_fields() -> dict[str, Any]:
-    """SCTASK-Felder, wenn Mondoo das Ticket geschlossen hat.
-
-    Prozessregel: Mondoo-Tickets werden nicht von Hand geschlossen. Ein
-    TYPE_CLOSED stammt daher von der Plattform, die den Befund im Scan als
-    behoben oder per Ausnahme erledigt sieht.
-    """
-    return {
-        "state": STATE_CLOSED_COMPLETE,
-        "work_notes": TASK_VERIFIED_NOTE,
-        "close_notes": TASK_VERIFIED_NOTE,
-    }
+        return (
+            "Das zugehoerige Mondoo-Ticket wurde geloescht. Der Befund wurde "
+            "nicht nachweislich behoben. Bitte fachlich pruefen, bevor der "
+            "Vorgang abgeschlossen wird."
+        )
+    return None
 
 
 def _truncate(value: str, limit: int) -> str:

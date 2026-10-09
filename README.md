@@ -59,14 +59,15 @@ Die App sucht bis zu rund 10 s nach Tasks zum RITM mit gesetzter Assignment
 Group und ersetzt nur diesen Workflow-Text; die Logzeile nennt, nach wie vielen
 Sekunden die Gruppe gesetzt war. Gelingt das nicht, bleibt der Task
 unverändert (WARNING im Log), das RITM ist davon nicht betroffen.
-Folgeereignisse aktualisieren `work_notes`,
-bei ermittelter Priorität `urgency`/`impact` und schließen bei Close/Delete.
-Bei Close (`TYPE_CLOSED`) schließt die App nach dem RITM auch alle noch
-offenen SCTASKs (Closed Complete, Arbeits- und Abschlussnotiz „Verifikation
-durch Mondoo-Scan“). Grundlage ist die Prozessregel, dass Mondoo-Tickets nicht
-von Hand geschlossen werden; der Webhook verrät nicht, wer geschlossen hat.
-Bei Delete bleiben die SCTASKs offen. Scheitert das Schließen, bleibt das RITM
-geschlossen und die Tasks werden von Hand geschlossen (WARNING im Log).
+Folgeereignisse aktualisieren `work_notes` und bei ermittelter Priorität
+`urgency`/`impact`. **Die App schließt nichts.** Bei Close/Delete
+(`TYPE_CLOSED`/`TYPE_DELETED`) ergänzt sie die Arbeitsnotiz des RITM um einen
+Hinweis und schreibt denselben Hinweis an jeden noch offenen SCTASK; der Status
+bleibt. Hintergrund: Eine Geschäftsregel auf `sc_task` lässt Tasks nur mit
+gebuchter Zeit schließen, und das Schließen des Behebungs-SCTASK legt den
+Prüf-SCTASK an. Das RITM schließt der Workflow, sobald der Prüf-SCTASK auf
+Closed Complete steht. Scheitert der Hinweis an die Tasks, steht er trotzdem
+am RITM (WARNING im Log).
 
 ## Architektur
 
